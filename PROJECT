@@ -1,0 +1,9 @@
+domain: kiln-fired.github.io
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: kiln-operator
+repo: github.com/kiln-fired/kiln-operator
+version: "3"
