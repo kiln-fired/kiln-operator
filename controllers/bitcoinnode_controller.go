@@ -44,9 +44,9 @@ type BitcoinNodeReconciler struct {
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes/finalizers,verbs=update
 func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
-
 	bitcoinNode := &bitcoinv1alpha1.BitcoinNode{}
 	err := r.Get(ctx, req.NamespacedName, bitcoinNode)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Bitcoin resource not found.")
@@ -58,6 +58,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, found)
+
 	if err != nil && errors.IsNotFound(err) {
 		ss := r.statefulsetForBitcoinNode(bitcoinNode)
 		log.Info("Creating a new StatefulSet", "StatefulSet.Namespace", ss.Namespace, "StatefulSet.Name", ss.Name)
@@ -79,6 +80,8 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	ls := labelsForBitcoinNode(b.Name)
 	size := int32(1)
 	rpcCertSecret := b.Spec.RPCServer.CertSecret
+	rpcUser := b.Spec.RPCServer.User
+	rpcPass := b.Spec.RPCServer.Password
 
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -103,6 +106,16 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 							ContainerPort: 18555,
 							Name:          "rpc",
 						}},
+						Env: []corev1.EnvVar{
+							{
+								Name:  "RPCUSER",
+								Value: rpcUser,
+							},
+							{
+								Name:  "RPCPASS",
+								Value: rpcPass,
+							},
+						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "btcd-home",
