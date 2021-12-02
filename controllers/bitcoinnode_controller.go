@@ -130,7 +130,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 								Name:          "server",
 							},
 							{
-								ContainerPort: 18555,
+								ContainerPort: 18556,
 								Name:          "rpc",
 							},
 						},
