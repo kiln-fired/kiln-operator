@@ -1,0 +1,62 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.7.0
+  creationTimestamp: null
+  name: bitcoinnodes.bitcoin.kiln-fired.github.io
+spec:
+  group: bitcoin.kiln-fired.github.io
+  names:
+    kind: BitcoinNode
+    listKind: BitcoinNodeList
+    plural: bitcoinnodes
+    singular: bitcoinnode
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BitcoinNode is the Schema for the bitcoinnodes API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: BitcoinNodeSpec defines the desired state of BitcoinNode
+            properties:
+              rpcServer:
+                properties:
+                  certSecret:
+                    type: string
+                  password:
+                    type: string
+                  user:
+                    type: string
+                type: object
+            type: object
+          status:
+            description: BitcoinNodeStatus defines the observed state of BitcoinNode
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

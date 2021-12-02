@@ -6,4 +6,14 @@ plugins:
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: kiln-operator
 repo: github.com/kiln-fired/kiln-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: kiln-fired.github.io
+  group: bitcoin
+  kind: BitcoinNode
+  path: github.com/kiln-fired/kiln-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"
