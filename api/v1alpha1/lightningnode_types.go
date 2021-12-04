@@ -33,7 +33,7 @@ type LightningNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	BitcoinNode BitcoinConnection `json:"bitcoinConnection,omitempty"`
+	BitcoinConnection BitcoinConnection `json:"bitcoinConnection,omitempty"`
 }
 
 // LightningNodeStatus defines the observed state of LightningNode
