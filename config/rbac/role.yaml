@@ -9,7 +9,7 @@ rules:
 - apiGroups:
   - bitcoin.kiln-fired.github.io
   resources:
-  - bitcoinnodes
+  - lightningnodes
   verbs:
   - create
   - delete
@@ -21,13 +21,13 @@ rules:
 - apiGroups:
   - bitcoin.kiln-fired.github.io
   resources:
-  - bitcoinnodes/finalizers
+  - lightningnodes/finalizers
   verbs:
   - update
 - apiGroups:
   - bitcoin.kiln-fired.github.io
   resources:
-  - bitcoinnodes/status
+  - lightningnodes/status
   verbs:
   - get
   - patch
