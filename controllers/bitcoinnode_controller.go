@@ -210,7 +210,7 @@ func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.Bitcoin
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    ls,
-			Name:      b.Name,
+			Name:      "blockchain",
 			Namespace: b.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
