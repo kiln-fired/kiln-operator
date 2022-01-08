@@ -1,0 +1,6 @@
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: LightningNode
+metadata:
+  name: lightningnode-sample
+spec:
+  # Add fields here

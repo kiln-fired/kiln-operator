@@ -1,10 +1,8 @@
-
----
+# permissions for end users to edit lightningnodes.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  creationTimestamp: null
-  name: manager-role
+  name: lightningnode-editor-role
 rules:
 - apiGroups:
   - bitcoin.kiln-fired.github.io
@@ -21,14 +19,6 @@ rules:
 - apiGroups:
   - bitcoin.kiln-fired.github.io
   resources:
-  - lightningnodes/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - bitcoin.kiln-fired.github.io
-  resources:
   - lightningnodes/status
   verbs:
   - get
-  - patch
-  - update

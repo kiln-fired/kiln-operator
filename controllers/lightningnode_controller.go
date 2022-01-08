@@ -17,17 +17,16 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"context"
-
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -35,35 +34,35 @@ import (
 	bitcoinv1alpha1 "github.com/kiln-fired/kiln-operator/api/v1alpha1"
 )
 
-// BitcoinNodeReconciler reconciles a BitcoinNode object
-type BitcoinNodeReconciler struct {
+// LightningNodeReconciler reconciles a LightningNode object
+type LightningNodeReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes/finalizers,verbs=update
-func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+//+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes/finalizers,verbs=update
+func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
-	bitcoinNode := &bitcoinv1alpha1.BitcoinNode{}
-	err := r.Get(ctx, req.NamespacedName, bitcoinNode)
+	lightningNode := &bitcoinv1alpha1.LightningNode{}
+	err := r.Get(ctx, req.NamespacedName, lightningNode)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Bitcoin resource not found.")
+			log.Info("LightningNode resource not found.")
 			return ctrl.Result{}, nil
 		}
-		log.Error(err, "Failed to get BitcoinNode")
+		log.Error(err, "Failed to get LightningNode")
 		return ctrl.Result{}, err
 	}
 
-	//Reconcile StatefulSet
+	// Reconcile StatefulSet
 	foundStatefulSet := &appsv1.StatefulSet{}
-	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, foundStatefulSet)
+	err = r.Get(ctx, types.NamespacedName{Name: lightningNode.Name, Namespace: lightningNode.Namespace}, foundStatefulSet)
 
 	if err != nil && errors.IsNotFound(err) {
-		ss := r.statefulsetForBitcoinNode(bitcoinNode)
+		ss := r.statefulsetForLightningNode(lightningNode)
 		log.Info("Creating a new StatefulSet", "StatefulSet.Namespace", ss.Namespace, "StatefulSet.Name", ss.Name)
 		err = r.Create(ctx, ss)
 		if err != nil {
@@ -78,10 +77,10 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Reconcile Service
 	foundService := &corev1.Service{}
-	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, foundService)
+	err = r.Get(ctx, types.NamespacedName{Name: lightningNode.Name, Namespace: lightningNode.Namespace}, foundService)
 
 	if err != nil && errors.IsNotFound(err) {
-		svc := r.serviceForBitcoinNode(bitcoinNode)
+		svc := r.serviceForLightningNode(lightningNode)
 		log.Info("Creating a new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
 		err = r.Create(ctx, svc)
 		if err != nil {
@@ -97,96 +96,110 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode) *appsv1.StatefulSet {
-	ls := labelsForBitcoinNode(b.Name)
+func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1.LightningNode) *appsv1.StatefulSet {
+	ls := labelsForLightningNode(l.Name)
 	size := int32(1)
-	rpcCertSecret := b.Spec.RPCServer.CertSecret
-	rpcUser := b.Spec.RPCServer.User
-	rpcPass := b.Spec.RPCServer.Password
+
+	bitcoinHost := l.Spec.BitcoinConnection.Host
+	bitcoinNetwork := l.Spec.BitcoinConnection.Network
+	bitcoinCertSecret := l.Spec.BitcoinConnection.CertSecret
+	bitcoinUser := l.Spec.BitcoinConnection.User
+	bitcoinPass := l.Spec.BitcoinConnection.Password
 
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      b.Name,
-			Namespace: b.Namespace,
+			Name:      l.Name,
+			Namespace: l.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
-			ServiceName: b.Name,
+			ServiceName: l.Name,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Image:   "quay.io/kiln-fired/btcd:latest",
-						Name:    "btcd",
-						Command: []string{"./start-btcd.sh"},
+						Image:   "quay.io/kiln-fired/lnd:latest",
+						Name:    "lnd",
+						Command: []string{"lnd"},
+						Args: []string{
+							"lnd",
+							"--noseedbackup",
+							"--$(CHAIN).active",
+							"--$(CHAIN).$(NETWORK)",
+							"--$(CHAIN).node=$(BACKEND)",
+							"--$(BACKEND).rpccert=/rpc/rpc.cert",
+							"--$(BACKEND).rpchost=$(RPCHOST)",
+							"--$(BACKEND).rpcuser=$(RPCUSER)",
+							"--$(BACKEND).rpcpass=$(RPCPASS)",
+							"--rpclisten=0.0.0.0:10009",
+						},
 						Ports: []corev1.ContainerPort{
 							{
-								ContainerPort: 18555,
-								Name:          "server",
+								ContainerPort: 9735,
+								Name:          "p2p",
 							},
 							{
-								ContainerPort: 18556,
+								ContainerPort: 10009,
 								Name:          "rpc",
 							},
 						},
 						Env: []corev1.EnvVar{
 							{
+								Name:  "NETWORK",
+								Value: bitcoinNetwork,
+							},
+							{
+								Name:  "RPCHOST",
+								Value: bitcoinHost,
+							},
+							{
 								Name:  "RPCUSER",
-								Value: rpcUser,
+								Value: bitcoinUser,
 							},
 							{
 								Name:  "RPCPASS",
-								Value: rpcPass,
+								Value: bitcoinPass,
+							},
+							{
+								Name:  "CHAIN",
+								Value: "bitcoin",
+							},
+							{
+								Name:  "BACKEND",
+								Value: "btcd",
 							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
-								Name:      "btcd-home",
-								MountPath: ".btcd",
-							},
-							{
-								Name:      "btcd-data",
-								MountPath: "data",
+								Name:      "lnd-home",
+								MountPath: ".lnd",
 							},
 							{
 								Name:      "rpc-cert",
 								MountPath: "/rpc/rpc.cert",
 								SubPath:   "tls.crt",
 							},
-							{
-								Name:      "rpc-cert",
-								MountPath: "/rpc/rpc.key",
-								SubPath:   "tls.key",
+						},
+					}},
+					Volumes: []corev1.Volume{{
+						Name: "rpc-cert",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: bitcoinCertSecret,
 							},
 						},
 					}},
-					Volumes: []corev1.Volume{
-						{
-							Name: "btcd-home",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: "rpc-cert",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: rpcCertSecret,
-								},
-							},
-						},
-					},
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
-					Name:   "btcd-data",
+					Name:   "lnd-home",
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
 					AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
@@ -200,33 +213,33 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		},
 	}
 
-	ctrl.SetControllerReference(b, ss, r.Scheme)
+	ctrl.SetControllerReference(l, ss, r.Scheme)
 	return ss
 }
 
-func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode) *corev1.Service {
-	ls := labelsForBitcoinNode(b.Name)
+func (r *LightningNodeReconciler) serviceForLightningNode(l *bitcoinv1alpha1.LightningNode) *corev1.Service {
+	ls := labelsForLightningNode(l.Name)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    ls,
-			Name:      b.Name,
-			Namespace: b.Namespace,
+			Name:      l.Name,
+			Namespace: l.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Type: "ClusterIP",
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "server",
+					Name:       "p2p",
 					Protocol:   "TCP",
-					Port:       18555,
-					TargetPort: intstr.FromInt(int(18555)),
+					Port:       9735,
+					TargetPort: intstr.FromInt(int(9735)),
 				},
 				{
 					Name:       "rpc",
 					Protocol:   "TCP",
-					Port:       18556,
-					TargetPort: intstr.FromInt(int(18556)),
+					Port:       10009,
+					TargetPort: intstr.FromInt(int(10009)),
 				},
 			},
 			Selector:                 ls,
@@ -235,18 +248,17 @@ func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.Bitcoin
 		},
 	}
 
-	ctrl.SetControllerReference(b, svc, r.Scheme)
+	ctrl.SetControllerReference(l, svc, r.Scheme)
 	return svc
 }
 
-func labelsForBitcoinNode(name string) map[string]string {
-	return map[string]string{"app": "bitcoinnode", "bitcoinnode_cr": name}
+func labelsForLightningNode(name string) map[string]string {
+	return map[string]string{"app": "lightningnode", "lightningnode_cr": name}
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *BitcoinNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LightningNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&bitcoinv1alpha1.BitcoinNode{}).
-		Owns(&appsv1.StatefulSet{}).
+		For(&bitcoinv1alpha1.LightningNode{}).
 		Complete(r)
 }
