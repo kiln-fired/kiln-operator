@@ -43,16 +43,6 @@ type LightningNodeReconciler struct {
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes/finalizers,verbs=update
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the LightningNode object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 	lightningNode := &bitcoinv1alpha1.LightningNode{}
@@ -109,8 +99,8 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1.LightningNode) *appsv1.StatefulSet {
 	ls := labelsForLightningNode(l.Name)
 	size := int32(1)
-	// Bitcoin node hostname is hard-coded in lnd image
-	// bitcoinHost := l.Spec.BitcoinConnection.Host
+
+	bitcoinHost := l.Spec.BitcoinConnection.Host
 	bitcoinNetwork := l.Spec.BitcoinConnection.Network
 	bitcoinCertSecret := l.Spec.BitcoinConnection.CertSecret
 	bitcoinUser := l.Spec.BitcoinConnection.User
@@ -135,7 +125,19 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 					Containers: []corev1.Container{{
 						Image:   "quay.io/kiln-fired/lnd:latest",
 						Name:    "lnd",
-						Command: []string{"./start-lnd.sh"},
+						Command: []string{"lnd"},
+						Args: []string{
+							"lnd",
+							"--noseedbackup",
+							"--$(CHAIN).active",
+							"--$(CHAIN).$(NETWORK)",
+							"--$(CHAIN).node=$(BACKEND)",
+							"--$(BACKEND).rpccert=/rpc/rpc.cert",
+							"--$(BACKEND).rpchost=$(RPCHOST)",
+							"--$(BACKEND).rpcuser=$(RPCUSER)",
+							"--$(BACKEND).rpcpass=$(RPCPASS)",
+							"--rpclisten=0.0.0.0:10009",
+						},
 						Ports: []corev1.ContainerPort{
 							{
 								ContainerPort: 9735,
@@ -152,12 +154,24 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 								Value: bitcoinNetwork,
 							},
 							{
+								Name:  "RPCHOST",
+								Value: bitcoinHost,
+							},
+							{
 								Name:  "RPCUSER",
 								Value: bitcoinUser,
 							},
 							{
 								Name:  "RPCPASS",
 								Value: bitcoinPass,
+							},
+							{
+								Name:  "CHAIN",
+								Value: "bitcoin",
+							},
+							{
+								Name:  "BACKEND",
+								Value: "btcd",
 							},
 						},
 						VolumeMounts: []corev1.VolumeMount{

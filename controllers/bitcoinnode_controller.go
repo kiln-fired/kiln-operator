@@ -58,7 +58,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// Reconcile StatefulSet
+	//Reconcile StatefulSet
 	foundStatefulSet := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, foundStatefulSet)
 
@@ -210,7 +210,7 @@ func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.Bitcoin
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    ls,
-			Name:      "blockchain",
+			Name:      b.Name,
 			Namespace: b.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
