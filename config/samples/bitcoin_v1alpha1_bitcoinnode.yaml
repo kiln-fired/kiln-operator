@@ -1,6 +1,9 @@
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: BitcoinNode
 metadata:
-  name: bitcoinnode-sample
+  name: btcd
 spec:
-  # Add fields here
+  rpcServer:
+    certSecret: btcd-rpc-tls
+    user: node-user
+    password: st4cks4ts

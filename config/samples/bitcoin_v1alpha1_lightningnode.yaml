@@ -1,6 +1,11 @@
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: LightningNode
 metadata:
-  name: lightningnode-sample
+  name: lnd
 spec:
-  # Add fields here
+  bitcoinConnection:
+    host: btcd
+    network: simnet
+    certSecret: btcd-rpc-tls
+    user: node-user
+    password: st4cks4ts
