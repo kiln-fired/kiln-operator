@@ -26,6 +26,8 @@ To generate CRD manifests, run:
 
 ## Running the operator locally
 
-Authenticate to a Kubernetes cluster with as an administrator and run:
+Authenticate to a Kubernetes cluster as an administrator and run:
 
 `make install run`
+
+See [sample CRs](config/samples) for reference configurations.
