@@ -205,7 +205,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 					AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("2Gi"),
+							corev1.ResourceStorage: resource.MustParse("2Gi"),
 						},
 					},
 				},
@@ -213,7 +213,10 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 		},
 	}
 
-	ctrl.SetControllerReference(l, ss, r.Scheme)
+	err := ctrl.SetControllerReference(l, ss, r.Scheme)
+	if err != nil {
+		return nil
+	}
 	return ss
 }
 
@@ -233,13 +236,13 @@ func (r *LightningNodeReconciler) serviceForLightningNode(l *bitcoinv1alpha1.Lig
 					Name:       "p2p",
 					Protocol:   "TCP",
 					Port:       9735,
-					TargetPort: intstr.FromInt(int(9735)),
+					TargetPort: intstr.FromInt(9735),
 				},
 				{
 					Name:       "rpc",
 					Protocol:   "TCP",
 					Port:       10009,
-					TargetPort: intstr.FromInt(int(10009)),
+					TargetPort: intstr.FromInt(10009),
 				},
 			},
 			Selector:                 ls,
@@ -248,7 +251,10 @@ func (r *LightningNodeReconciler) serviceForLightningNode(l *bitcoinv1alpha1.Lig
 		},
 	}
 
-	ctrl.SetControllerReference(l, svc, r.Scheme)
+	err := ctrl.SetControllerReference(l, svc, r.Scheme)
+	if err != nil {
+		return nil
+	}
 	return svc
 }
 

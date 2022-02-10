@@ -30,14 +30,15 @@ type RPCServer struct {
 type BitcoinNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	RPCServer RPCServer `json:"rpcServer,omitempty"`
+	RPCServer     RPCServer `json:"rpcServer,omitempty"`
+	MiningAddress string    `json:"miningAddress,omitempty"`
 }
 
 // BitcoinNodeStatus defines the observed state of BitcoinNode
 type BitcoinNodeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	BlockCount int64 `json:"blockCount"`
 }
 
 //+kubebuilder:object:root=true
