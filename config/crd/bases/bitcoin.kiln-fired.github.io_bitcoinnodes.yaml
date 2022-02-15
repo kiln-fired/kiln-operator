@@ -41,6 +41,8 @@ spec:
                 type: integer
               miningAddress:
                 type: string
+              miningEnabled:
+                type: boolean
               rpcServer:
                 description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
                   Important: Run "make" to regenerate code after modifying this file'
