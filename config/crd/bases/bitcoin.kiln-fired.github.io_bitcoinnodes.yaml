@@ -36,6 +36,9 @@ spec:
           spec:
             description: BitcoinNodeSpec defines the desired state of BitcoinNode
             properties:
+              minBlocks:
+                format: int64
+                type: integer
               miningAddress:
                 type: string
               rpcServer:

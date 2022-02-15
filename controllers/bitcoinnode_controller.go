@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -57,24 +58,6 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 		log.Error(err, "Failed to get BitcoinNode")
 		return ctrl.Result{}, err
-	}
-
-	foundSecret := &corev1.Secret{}
-	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Spec.RPCServer.CertSecret, Namespace: bitcoinNode.Namespace}, foundSecret)
-
-	if err != nil {
-		log.Error(err, "Failed to get Secret")
-		return ctrl.Result{}, err
-	}
-
-	caCert := foundSecret.Data["ca.crt"]
-
-	connCfg := &rpcclient.ConnConfig{
-		Host:         bitcoinNode.Name + "." + bitcoinNode.Namespace + "." + "svc.cluster.local:18556",
-		User:         bitcoinNode.Spec.RPCServer.User,
-		Pass:         bitcoinNode.Spec.RPCServer.Password,
-		Certificates: caCert,
-		HTTPPostMode: true,
 	}
 
 	//Reconcile StatefulSet
@@ -113,15 +96,45 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	foundSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Spec.RPCServer.CertSecret, Namespace: bitcoinNode.Namespace}, foundSecret)
+
+	if err != nil {
+		log.Error(err, "Failed to get Secret")
+		return ctrl.Result{}, err
+	}
+
+	caCert := foundSecret.Data["ca.crt"]
+
+	connCfg := &rpcclient.ConnConfig{
+		Host:         bitcoinNode.Name + "." + bitcoinNode.Namespace + "." + "svc.cluster.local:18556",
+		User:         bitcoinNode.Spec.RPCServer.User,
+		Pass:         bitcoinNode.Spec.RPCServer.Password,
+		Certificates: caCert,
+		HTTPPostMode: true,
+	}
+
 	btcdClient, err := rpcclient.New(connCfg, nil)
 	blockCount, err := btcdClient.GetBlockCount()
 
 	if err != nil {
-		log.Error(err, "Failed to get the block count")
-		return ctrl.Result{}, err
+		log.Info("Failed to get the block count")
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
 	log.Info("Retreived block count", "count", blockCount)
+	minBlocks := bitcoinNode.Spec.MinBlocks
+
+	if minBlocks != 0 && blockCount < minBlocks {
+		numBlocksToGenerate := minBlocks - blockCount
+		hashes, err := btcdClient.Generate(uint32(numBlocksToGenerate))
+		if err != nil {
+			log.Info("Failed to generate blocks")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		log.Info("Generated blocks", "numBlocks", len(hashes))
+	}
+
 	bitcoinNode.Status.BlockCount = blockCount
 
 	err = r.Status().Update(ctx, bitcoinNode)

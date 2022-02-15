@@ -32,6 +32,7 @@ type BitcoinNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	RPCServer     RPCServer `json:"rpcServer,omitempty"`
 	MiningAddress string    `json:"miningAddress,omitempty"`
+	MinBlocks     int64     `json:"minBlocks,omitempty"`
 }
 
 // BitcoinNodeStatus defines the observed state of BitcoinNode

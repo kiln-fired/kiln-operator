@@ -4,6 +4,7 @@ metadata:
   name: btcd
 spec:
   miningAddress: rhLmdkndRELHhHAUnSut5PhFZ8do8aNMk4
+  minBlocks: 400
   rpcServer:
     certSecret: btcd-rpc-tls
     user: node-user
