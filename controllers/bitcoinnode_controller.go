@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -24,13 +25,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/btcsuite/btcd/rpcclient"
 
 	bitcoinv1alpha1 "github.com/kiln-fired/kiln-operator/api/v1alpha1"
 )
@@ -94,6 +96,53 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	foundSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Spec.RPCServer.CertSecret, Namespace: bitcoinNode.Namespace}, foundSecret)
+
+	if err != nil {
+		log.Error(err, "Failed to get Secret")
+		return ctrl.Result{}, err
+	}
+
+	caCert := foundSecret.Data["ca.crt"]
+
+	connCfg := &rpcclient.ConnConfig{
+		Host:         bitcoinNode.Name + "." + bitcoinNode.Namespace + "." + "svc.cluster.local:18556",
+		User:         bitcoinNode.Spec.RPCServer.User,
+		Pass:         bitcoinNode.Spec.RPCServer.Password,
+		Certificates: caCert,
+		HTTPPostMode: true,
+	}
+
+	btcdClient, err := rpcclient.New(connCfg, nil)
+	blockCount, err := btcdClient.GetBlockCount()
+
+	if err != nil {
+		log.Info("Failed to get the block count")
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+	}
+
+	log.Info("Retreived block count", "count", blockCount)
+	minBlocks := bitcoinNode.Spec.MinBlocks
+
+	if minBlocks != 0 && blockCount < minBlocks {
+		numBlocksToGenerate := minBlocks - blockCount
+		hashes, err := btcdClient.Generate(uint32(numBlocksToGenerate))
+		if err != nil {
+			log.Info("Failed to generate blocks")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		log.Info("Generated blocks", "numBlocks", len(hashes))
+	}
+
+	bitcoinNode.Status.BlockCount = blockCount
+
+	err = r.Status().Update(ctx, bitcoinNode)
+	if err != nil {
+		log.Error(err, "Failed to update BitcoinNode status")
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -142,6 +191,10 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 							{
 								Name:  "RPCPASS",
 								Value: rpcPass,
+							},
+							{
+								Name:  "MINING_ADDRESS",
+								Value: "rhLmdkndRELHhHAUnSut5PhFZ8do8aNMk4",
 							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
@@ -192,7 +245,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
 					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceName(corev1.ResourceStorage): resource.MustParse("2Gi"),
+							corev1.ResourceStorage: resource.MustParse("2Gi"),
 						},
 					},
 				},
@@ -200,7 +253,10 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		},
 	}
 
-	ctrl.SetControllerReference(b, ss, r.Scheme)
+	err := ctrl.SetControllerReference(b, ss, r.Scheme)
+	if err != nil {
+		return nil
+	}
 	return ss
 }
 
@@ -220,13 +276,13 @@ func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.Bitcoin
 					Name:       "server",
 					Protocol:   "TCP",
 					Port:       18555,
-					TargetPort: intstr.FromInt(int(18555)),
+					TargetPort: intstr.FromInt(18555),
 				},
 				{
 					Name:       "rpc",
 					Protocol:   "TCP",
 					Port:       18556,
-					TargetPort: intstr.FromInt(int(18556)),
+					TargetPort: intstr.FromInt(18556),
 				},
 			},
 			Selector:                 ls,
@@ -235,7 +291,10 @@ func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.Bitcoin
 		},
 	}
 
-	ctrl.SetControllerReference(b, svc, r.Scheme)
+	err := ctrl.SetControllerReference(b, svc, r.Scheme)
+	if err != nil {
+		return nil
+	}
 	return svc
 }
 
