@@ -78,6 +78,39 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// Update mining address
+	for i, c := range foundStatefulSet.Spec.Template.Spec.Containers {
+		if c.Name == "btcd" {
+			envVarFound := false
+			for j, e := range c.Env {
+				if e.Name == "MINING_ADDRESS" {
+					envVarFound = true
+					if e.Value != bitcoinNode.Spec.MiningAddress {
+						foundStatefulSet.Spec.Template.Spec.Containers[i].Env[j].Value = bitcoinNode.Spec.MiningAddress
+						err = r.Update(ctx, foundStatefulSet)
+						if err != nil {
+							log.Error(err, "Failed to update mining address", "StatefulSet.Namespace", foundStatefulSet.Namespace, "StatefulSet.Name", foundStatefulSet.Name)
+						}
+						log.Info("Updated the mining address")
+						return ctrl.Result{Requeue: true}, nil
+					}
+				}
+			}
+			if !envVarFound {
+				envVar := corev1.EnvVar{}
+				envVar.Name = "MINING_ADDRESS"
+				envVar.Value = bitcoinNode.Spec.MiningAddress
+				foundStatefulSet.Spec.Template.Spec.Containers[i].Env = append(foundStatefulSet.Spec.Template.Spec.Containers[i].Env, envVar)
+				err = r.Update(ctx, foundStatefulSet)
+				if err != nil {
+					log.Error(err, "Failed to add mining address", "StatefulSet.Namespace", foundStatefulSet.Namespace, "StatefulSet.Name", foundStatefulSet.Name)
+				}
+				log.Info("Added new mining address")
+				return ctrl.Result{Requeue: true}, nil
+			}
+		}
+	}
+
 	// Reconcile Service
 	foundService := &corev1.Service{}
 	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, foundService)
@@ -129,10 +162,28 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		numBlocksToGenerate := minBlocks - blockCount
 		hashes, err := btcdClient.Generate(uint32(numBlocksToGenerate))
 		if err != nil {
-			log.Info("Failed to generate blocks")
+			log.Info("Failed to generate blocks", "error", err.Error())
 			return ctrl.Result{Requeue: true}, nil
 		}
 		log.Info("Generated blocks", "numBlocks", len(hashes))
+	}
+
+	miningEnabled, err := btcdClient.GetGenerate()
+
+	if err != nil {
+		log.Info("Failed to determine if mining is enabled")
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
+	}
+
+	log.Info("Got a mining status", "miningEnabled", miningEnabled)
+	enableMining := bitcoinNode.Spec.MiningEnabled
+
+	if enableMining && !miningEnabled {
+		err = btcdClient.SetGenerate(true, 1)
+		if err != nil {
+			log.Info("Failed to enable mining", "error", err.Error())
+		}
+		log.Info("Enabled mining")
 	}
 
 	bitcoinNode.Status.BlockCount = blockCount
@@ -191,10 +242,6 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 							{
 								Name:  "RPCPASS",
 								Value: rpcPass,
-							},
-							{
-								Name:  "MINING_ADDRESS",
-								Value: "rhLmdkndRELHhHAUnSut5PhFZ8do8aNMk4",
 							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
