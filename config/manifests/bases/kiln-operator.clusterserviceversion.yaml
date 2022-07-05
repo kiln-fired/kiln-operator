@@ -1,0 +1,50 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: kiln-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: BitcoinNode is the Schema for the bitcoinnodes API
+      displayName: Bitcoin Node
+      kind: BitcoinNode
+      name: bitcoinnodes.bitcoin.kiln-fired.github.io
+      version: v1alpha1
+    - description: LightningNode is the Schema for the lightningnodes API
+      displayName: Lightning Node
+      kind: LightningNode
+      name: lightningnodes.bitcoin.kiln-fired.github.io
+      version: v1alpha1
+  description: Operator for lnd and btcd nodes
+  displayName: kiln
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - btcd
+  - lnd
+  links:
+  - name: Kiln Operator
+    url: https://kiln-fired.github.io
+  maturity: alpha
+  provider:
+    name: Open Persuasion
+  version: 0.0.0
