@@ -24,3 +24,9 @@ testbin/*
 *.swo
 *~
 /kiln-operator
+
+bundle
+bundle/**
+bundle.Dockerfile
+charts/
+bundle*/
