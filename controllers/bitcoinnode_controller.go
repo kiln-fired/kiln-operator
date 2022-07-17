@@ -246,6 +246,16 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 								Value: rpcPass,
 							},
 						},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse(".05"),
+								corev1.ResourceMemory: resource.MustParse("500Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    resource.MustParse(".10"),
+								corev1.ResourceMemory: resource.MustParse("1Gi"),
+							},
+						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "btcd-home",
