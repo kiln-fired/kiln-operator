@@ -47,6 +47,7 @@ type BitcoinNodeReconciler struct {
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=services;secrets,verbs=get;list;watch;create;update;patch;delete
 
 func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
@@ -205,6 +206,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	rpcCertSecret := b.Spec.RPCServer.CertSecret
 	rpcUser := b.Spec.RPCServer.User
 	rpcPass := b.Spec.RPCServer.Password
+	resources := b.Spec.Resources
 
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -246,6 +248,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 								Value: rpcPass,
 							},
 						},
+						Resources: resources,
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "btcd-home",
@@ -356,5 +359,6 @@ func (r *BitcoinNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bitcoinv1alpha1.BitcoinNode{}).
 		Owns(&appsv1.StatefulSet{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
 }
