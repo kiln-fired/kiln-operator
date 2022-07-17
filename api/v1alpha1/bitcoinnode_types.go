@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -34,6 +35,11 @@ type BitcoinNodeSpec struct {
 	MiningAddress string    `json:"miningAddress,omitempty"`
 	MinBlocks     int64     `json:"minBlocks,omitempty"`
 	MiningEnabled bool      `json:"miningEnabled,omitempty"`
+
+	// The compute resource requirements.
+	// +optional
+	// +kubebuilder:default:={limits: {cpu: "100m", memory: "1Gi"}, requests: {cpu: "50m", memory: "200Mi"}}
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // BitcoinNodeStatus defines the observed state of BitcoinNode
