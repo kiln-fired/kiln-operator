@@ -159,6 +159,19 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	log.Info("Retreived block count", "count", blockCount)
+
+	peer := bitcoinNode.Spec.Peer
+
+	if peer != "" {
+		perm := "perm"
+		err := btcdClient.Node("connect", peer, &perm)
+		if err != nil {
+			log.Info("Failed to add peer", "error", err.Error())
+			return ctrl.Result{}, err
+		}
+		log.Info("Connected to peer", "peer", peer)
+	}
+
 	minBlocks := bitcoinNode.Spec.MinBlocks
 
 	if minBlocks != 0 && blockCount < minBlocks {
