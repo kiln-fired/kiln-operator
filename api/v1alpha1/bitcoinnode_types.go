@@ -33,8 +33,19 @@ type BitcoinNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	RPCServer     RPCServer `json:"rpcServer,omitempty"`
 	MiningAddress string    `json:"miningAddress,omitempty"`
-	MinBlocks     int64     `json:"minBlocks,omitempty"`
-	MiningEnabled bool      `json:"miningEnabled,omitempty"`
+
+	// Host and port of peer to connect
+	// +optional
+	Peer string `json:"peer,omitempty"`
+
+	// Minimum number of blocks to mine on initial startup
+	// +optional
+	// +kubebuilder:default:=0
+	MinBlocks int64 `json:"minBlocks,omitempty"`
+
+	// CPU Mining Enabled
+	// +kubebuilder:default:=false
+	MiningEnabled bool `json:"miningEnabled,omitempty"`
 
 	// The compute resource requirements.
 	// +optional

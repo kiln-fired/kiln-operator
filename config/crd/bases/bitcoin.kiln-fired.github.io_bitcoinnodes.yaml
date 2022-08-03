@@ -37,12 +37,19 @@ spec:
             description: BitcoinNodeSpec defines the desired state of BitcoinNode
             properties:
               minBlocks:
+                default: 0
+                description: Minimum number of blocks to mine on initial startup
                 format: int64
                 type: integer
               miningAddress:
                 type: string
               miningEnabled:
+                default: false
+                description: CPU Mining Enabled
                 type: boolean
+              peer:
+                description: Host and port of peer to connect
+                type: string
               resources:
                 default:
                   limits:
