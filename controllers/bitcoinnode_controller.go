@@ -261,6 +261,30 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 								Value: rpcPass,
 							},
 						},
+						LivenessProbe: &corev1.Probe{
+							Handler: corev1.Handler{
+								Exec: &corev1.ExecAction{
+									Command: []string{
+										"/bin/bash",
+										"-c",
+										"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
+									},
+								},
+							},
+							InitialDelaySeconds: 5,
+						},
+						ReadinessProbe: &corev1.Probe{
+							Handler: corev1.Handler{
+								Exec: &corev1.ExecAction{
+									Command: []string{
+										"/bin/bash",
+										"-c",
+										"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
+									},
+								},
+							},
+							InitialDelaySeconds: 5,
+						},
 						Resources: resources,
 						VolumeMounts: []corev1.VolumeMount{
 							{
