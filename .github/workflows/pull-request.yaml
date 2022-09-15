@@ -21,4 +21,4 @@ jobs:
 
       - name: build code
         shell: bash
-        run:  make
+        run:  make build
