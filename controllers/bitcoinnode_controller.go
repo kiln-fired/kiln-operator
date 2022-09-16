@@ -81,39 +81,6 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// Update mining address
-	for i, c := range foundStatefulSet.Spec.Template.Spec.Containers {
-		if c.Name == "btcd" {
-			envVarFound := false
-			for j, e := range c.Env {
-				if e.Name == "MINING_ADDRESS" {
-					envVarFound = true
-					if e.Value != bitcoinNode.Spec.MiningAddress {
-						foundStatefulSet.Spec.Template.Spec.Containers[i].Env[j].Value = bitcoinNode.Spec.MiningAddress
-						err = r.Update(ctx, foundStatefulSet)
-						if err != nil {
-							log.Error(err, "Failed to update mining address", "StatefulSet.Namespace", foundStatefulSet.Namespace, "StatefulSet.Name", foundStatefulSet.Name)
-						}
-						log.Info("Updated the mining address")
-						return ctrl.Result{Requeue: true}, nil
-					}
-				}
-			}
-			if !envVarFound {
-				envVar := corev1.EnvVar{}
-				envVar.Name = "MINING_ADDRESS"
-				envVar.Value = bitcoinNode.Spec.MiningAddress
-				foundStatefulSet.Spec.Template.Spec.Containers[i].Env = append(foundStatefulSet.Spec.Template.Spec.Containers[i].Env, envVar)
-				err = r.Update(ctx, foundStatefulSet)
-				if err != nil {
-					log.Error(err, "Failed to add mining address", "StatefulSet.Namespace", foundStatefulSet.Namespace, "StatefulSet.Name", foundStatefulSet.Name)
-				}
-				log.Info("Added new mining address")
-				return ctrl.Result{Requeue: true}, nil
-			}
-		}
-	}
-
 	// Reconcile Service
 	foundService := &corev1.Service{}
 	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, foundService)
@@ -216,10 +183,6 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode) *appsv1.StatefulSet {
 	ls := labelsForBitcoinNode(b.Name)
 	size := int32(1)
-	rpcCertSecret := b.Spec.RPCServer.CertSecret
-	rpcUser := b.Spec.RPCServer.User
-	rpcPass := b.Spec.RPCServer.Password
-	resources := b.Spec.Resources
 
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -254,11 +217,15 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 						Env: []corev1.EnvVar{
 							{
 								Name:  "RPCUSER",
-								Value: rpcUser,
+								Value: b.Spec.RPCServer.User,
 							},
 							{
 								Name:  "RPCPASS",
-								Value: rpcPass,
+								Value: b.Spec.RPCServer.Password,
+							},
+							{
+								Name:  "MINING_ADDRESS",
+								Value: b.Spec.MiningAddress,
 							},
 						},
 						LivenessProbe: &corev1.Probe{
@@ -285,7 +252,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 							},
 							InitialDelaySeconds: 5,
 						},
-						Resources: resources,
+						Resources: b.Spec.Resources,
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "btcd-home",
@@ -318,7 +285,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 							Name: "rpc-cert",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: rpcCertSecret,
+									SecretName: b.Spec.RPCServer.CertSecret,
 								},
 							},
 						},
