@@ -21,4 +21,8 @@ jobs:
 
       - name: build code
         shell: bash
-        run:  make
+        run:  make build
+
+      - name: run unit tests
+        shell: bash
+        run:  make build

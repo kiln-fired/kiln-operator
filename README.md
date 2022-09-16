@@ -1,5 +1,9 @@
 # `kiln` Operator
 
+![build status](https://github.com/kiln-fired/kiln-operator/workflows/push/badge.svg)
+![go report card](https://goreportcard.com/badge/github.com/kiln-fired/kiln-operator)
+![go version](https://img.shields.io/github/go-mod/go-version/kiln-fired/kiln-operator)
+
 A Kubernetes operator for managing the state of Bitcoin and Lightning nodes.
 
 ## System Requirements
