@@ -19,11 +19,21 @@ jobs:
       - name: check out code
         uses: actions/checkout@v2
 
+      - name: prepare build environment
+        run: |
+          # Create Binary Directory
+          mkdir -p bin
+          curl -L -o bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v1.18.1/operator-sdk_linux_amd64
+          make controller-gen
+          make kustomize
+          echo bin >> $GITHUB_PATH
+          chmod +x bin/*
+
       - name: build code
         shell: bash
         run:  make build
 
-      - name: build container image
+      - name: build operator image
         uses: docker/build-push-action@v2.7.0
         with:
           context: .
@@ -32,16 +42,15 @@ jobs:
           tags: |
             quay.io/kiln-fired/kiln-operator:latest
 
-      - name: provision build tools
-        run: |
-          # Create Binary Directory
-          mkdir -p bin
-          curl -L -o bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/1.18.1/operator-sdk_linux_amd64
-          make controller-gen
-          make kustomize
-          echo bin >> $GITHUB_PATH
-          chmod +x bin/*
-
       - name: build bundle
         shell: bash
         run: make bundle IMG=quay.io/kiln-fired/kiln-operator:latest VERSION=0.0.1 DEFAULT_CHANNEL=alpha
+
+      - name: build bundle image
+        uses: docker/build-push-action@v2.7.0
+        with:
+          context: .
+          file: ./${{ env.PROJECT_DIR }}/bundle.Dockerfile
+          push: false
+          tags: |
+            quay.io/kiln-fired/kiln-operator-bundle:latest
