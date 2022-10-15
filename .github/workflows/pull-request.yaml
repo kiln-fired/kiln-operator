@@ -23,13 +23,18 @@ jobs:
         shell: bash
         run:  make build
 
+      - name: authenticate to container image registry
+        uses: docker/login-action@v2
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
       - name: build container image
         uses: docker/build-push-action@v2.7.0
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/Dockerfile
-          push: false
+          push: true
           tags: |
-            quay.io/kiln-fired/kiln-operator:${{ github.sha }}
             quay.io/kiln-fired/kiln-operator:latest
-            quay.io/kiln-fired/kiln-operator:${{ github.ref_name }}
