@@ -23,6 +23,13 @@ jobs:
         shell: bash
         run:  make build
 
-      - name: run unit tests
-        shell: bash
-        run:  make build
+      - name: build container image
+        uses: docker/build-push-action@v2.7.0
+        with:
+          context: .
+          file: ./${{ env.PROJECT_DIR }}/Dockerfile
+          push: false
+          tags: |
+            quay.io/kiln-fired/kiln-operator:${{ github.sha }}
+            quay.io/kiln-fired/kiln-operator:latest
+            quay.io/kiln-fired/kiln-operator:${{ github.ref_name }}
