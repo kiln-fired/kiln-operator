@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.16 as builder
+FROM golang:1.18 as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -13,6 +13,8 @@ RUN go mod download
 COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
+COPY channels/ /channels/
+RUN chmod -R a+rx /channels/
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
@@ -22,6 +24,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=builder /channels /channels
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
