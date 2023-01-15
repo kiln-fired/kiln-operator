@@ -141,7 +141,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		log.Info("Connected to peer", "peer", peer)
 	}
 
-	minBlocks := bitcoinNode.Spec.MinBlocks
+	minBlocks := bitcoinNode.Spec.Mining.MinBlocks
 
 	if minBlocks != 0 && blockCount < minBlocks {
 		numBlocksToGenerate := minBlocks - blockCount
@@ -161,7 +161,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	log.Info("Got a mining status", "miningEnabled", miningEnabled)
-	enableMining := bitcoinNode.Spec.MiningEnabled
+	enableMining := bitcoinNode.Spec.Mining.CpuMiningEnabled
 
 	if enableMining && !miningEnabled {
 		err = btcdClient.SetGenerate(true, 1)
@@ -171,7 +171,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		log.Info("Enabled mining")
 	}
 
-	bitcoinNode.Status.BlockCount = blockCount
+	bitcoinNode.Status.LastBlockCount = blockCount
 
 	err = r.Status().Update(ctx, bitcoinNode)
 	if err != nil {
@@ -228,7 +228,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 								},
 								{
 									Name:  "MINING_ADDRESS",
-									Value: b.Spec.MiningAddress,
+									Value: b.Spec.Mining.RewardAddress,
 								},
 							},
 							SecurityContext: &corev1.SecurityContext{
@@ -288,7 +288,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 							Image:   "quay.io/kiln-fired/btcd:latest",
 							Name:    "timer",
 							Command: []string{"/bin/sh"},
-							Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.SecondsPerBlock)},
+							Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.Mining.SecondsPerBlock)},
 							Env: []corev1.EnvVar{
 								{
 									Name:  "RPCUSER",
@@ -300,7 +300,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 								},
 								{
 									Name:  "MINING_ADDRESS",
-									Value: b.Spec.MiningAddress,
+									Value: b.Spec.Mining.RewardAddress,
 								},
 							},
 							SecurityContext: &corev1.SecurityContext{

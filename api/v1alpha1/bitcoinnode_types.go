@@ -27,6 +27,26 @@ type RPCServer struct {
 	Password   string `json:"password,omitempty"`
 }
 
+type Mining struct {
+	// CPU Mining Enabled
+	// +kubebuilder:default:=false
+	CpuMiningEnabled bool `json:"cpuMiningEnabled,omitempty"`
+
+	// Address the should receive block rewards
+	// +optional
+	RewardAddress string `json:"rewardAddress,omitempty"`
+
+	// Minimum number of blocks to mine on initial startup
+	// +optional
+	// +kubebuilder:default:=0
+	MinBlocks int64 `json:"minBlocks,omitempty"`
+
+	// Number of seconds to wait between scheduled block generation
+	// +optional
+	// +kubebuilder:default:=0
+	SecondsPerBlock int64 `json:"secondsPerBlock,omitempty"`
+}
+
 // BitcoinNodeSpec defines the desired state of BitcoinNode
 type BitcoinNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -39,22 +59,9 @@ type BitcoinNodeSpec struct {
 	// +optional
 	Peer string `json:"peer,omitempty"`
 
-	// CPU Mining Enabled
-	// +kubebuilder:default:=false
-	MiningEnabled bool `json:"miningEnabled,omitempty"`
-
-	// Address the should receive block rewards
+	// Mining configuration
 	// +optional
-	MiningAddress string `json:"miningAddress,omitempty"`
-
-	// Minimum number of blocks to mine on initial startup
-	// +optional
-	// +kubebuilder:default:=0
-	MinBlocks int64 `json:"minBlocks,omitempty"`
-
-	// Number of seconds to wait between scheduled block generation
-	// +optional
-	SecondsPerBlock int64 `json:"secondsPerBlock,omitempty"`
+	Mining Mining `json:"mining,omitempty"`
 
 	// The compute resource requirements
 	// +optional
@@ -66,7 +73,7 @@ type BitcoinNodeSpec struct {
 type BitcoinNodeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	BlockCount int64 `json:"blockCount"`
+	LastBlockCount int64 `json:"LastBlockCount"`
 }
 
 //+kubebuilder:object:root=true

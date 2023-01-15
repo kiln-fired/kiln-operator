@@ -36,18 +36,28 @@ spec:
           spec:
             description: BitcoinNodeSpec defines the desired state of BitcoinNode
             properties:
-              minBlocks:
-                default: 0
-                description: Minimum number of blocks to mine on initial startup
-                format: int64
-                type: integer
-              miningAddress:
-                description: Address the should receive block rewards
-                type: string
-              miningEnabled:
-                default: false
-                description: CPU Mining Enabled
-                type: boolean
+              mining:
+                description: Mining configuration
+                properties:
+                  cpuMiningEnabled:
+                    default: false
+                    description: CPU Mining Enabled
+                    type: boolean
+                  minBlocks:
+                    default: 0
+                    description: Minimum number of blocks to mine on initial startup
+                    format: int64
+                    type: integer
+                  rewardAddress:
+                    description: Address the should receive block rewards
+                    type: string
+                  secondsPerBlock:
+                    default: 0
+                    description: Number of seconds to wait between scheduled block
+                      generation
+                    format: int64
+                    type: integer
+                type: object
               peer:
                 description: Host and port of peer to connect
                 type: string
@@ -94,22 +104,18 @@ spec:
                   user:
                     type: string
                 type: object
-              secondsPerBlock:
-                description: Number of seconds to wait between scheduled block generation
-                format: int64
-                type: integer
             type: object
           status:
             description: BitcoinNodeStatus defines the observed state of BitcoinNode
             properties:
-              blockCount:
+              LastBlockCount:
                 description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                   of cluster Important: Run "make" to regenerate code after modifying
                   this file'
                 format: int64
                 type: integer
             required:
-            - blockCount
+            - LastBlockCount
             type: object
         type: object
     served: true
