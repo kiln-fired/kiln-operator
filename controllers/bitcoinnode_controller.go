@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -25,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/pointer"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -200,80 +202,136 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Image:   "quay.io/kiln-fired/btcd:latest",
-						Name:    "btcd",
-						Command: []string{"./start-btcd.sh"},
-						Ports: []corev1.ContainerPort{
-							{
-								ContainerPort: 18555,
-								Name:          "server",
-							},
-							{
-								ContainerPort: 18556,
-								Name:          "rpc",
-							},
-						},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "RPCUSER",
-								Value: b.Spec.RPCServer.User,
-							},
-							{
-								Name:  "RPCPASS",
-								Value: b.Spec.RPCServer.Password,
-							},
-							{
-								Name:  "MINING_ADDRESS",
-								Value: b.Spec.MiningAddress,
-							},
-						},
-						LivenessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								Exec: &corev1.ExecAction{
-									Command: []string{
-										"/bin/bash",
-										"-c",
-										"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
-									},
+					Containers: []corev1.Container{
+						{
+							Image:   "quay.io/kiln-fired/btcd:latest",
+							Name:    "btcd",
+							Command: []string{"./start-btcd.sh"},
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 18555,
+									Name:          "server",
+								},
+								{
+									ContainerPort: 18556,
+									Name:          "rpc",
 								},
 							},
-							InitialDelaySeconds: 5,
-						},
-						ReadinessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								Exec: &corev1.ExecAction{
-									Command: []string{
-										"/bin/bash",
-										"-c",
-										"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
-									},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "RPCUSER",
+									Value: b.Spec.RPCServer.User,
+								},
+								{
+									Name:  "RPCPASS",
+									Value: b.Spec.RPCServer.Password,
+								},
+								{
+									Name:  "MINING_ADDRESS",
+									Value: b.Spec.MiningAddress,
 								},
 							},
-							InitialDelaySeconds: 5,
+							SecurityContext: &corev1.SecurityContext{
+								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+								Privileged:               pointer.Bool(false),
+								RunAsNonRoot:             pointer.Bool(true),
+								AllowPrivilegeEscalation: pointer.Bool(false),
+								SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+							},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{
+											"/bin/bash",
+											"-c",
+											"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
+										},
+									},
+								},
+								InitialDelaySeconds: 5,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{
+											"/bin/bash",
+											"-c",
+											"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
+										},
+									},
+								},
+								InitialDelaySeconds: 5,
+							},
+							Resources: b.Spec.Resources,
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "btcd-home",
+									MountPath: ".btcd",
+								},
+								{
+									Name:      "btcd-data",
+									MountPath: "data",
+								},
+								{
+									Name:      "rpc-cert",
+									MountPath: "/rpc/rpc.cert",
+									SubPath:   "tls.crt",
+								},
+								{
+									Name:      "rpc-cert",
+									MountPath: "/rpc/rpc.key",
+									SubPath:   "tls.key",
+								},
+							},
 						},
-						Resources: b.Spec.Resources,
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "btcd-home",
-								MountPath: ".btcd",
+						{
+							Image:   "quay.io/kiln-fired/btcd:latest",
+							Name:    "timer",
+							Command: []string{"/bin/sh"},
+							Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.SecondsPerBlock)},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "RPCUSER",
+									Value: b.Spec.RPCServer.User,
+								},
+								{
+									Name:  "RPCPASS",
+									Value: b.Spec.RPCServer.Password,
+								},
+								{
+									Name:  "MINING_ADDRESS",
+									Value: b.Spec.MiningAddress,
+								},
 							},
-							{
-								Name:      "btcd-data",
-								MountPath: "data",
+							SecurityContext: &corev1.SecurityContext{
+								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+								Privileged:               pointer.Bool(false),
+								RunAsNonRoot:             pointer.Bool(true),
+								AllowPrivilegeEscalation: pointer.Bool(false),
+								SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 							},
-							{
-								Name:      "rpc-cert",
-								MountPath: "/rpc/rpc.cert",
-								SubPath:   "tls.crt",
-							},
-							{
-								Name:      "rpc-cert",
-								MountPath: "/rpc/rpc.key",
-								SubPath:   "tls.key",
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "btcd-home",
+									MountPath: ".btcd",
+								},
+								{
+									Name:      "btcd-data",
+									MountPath: "data",
+								},
+								{
+									Name:      "rpc-cert",
+									MountPath: "/rpc/rpc.cert",
+									SubPath:   "tls.crt",
+								},
+								{
+									Name:      "rpc-cert",
+									MountPath: "/rpc/rpc.key",
+									SubPath:   "tls.key",
+								},
 							},
 						},
-					}},
+					},
 					Volumes: []corev1.Volume{
 						{
 							Name: "btcd-home",

@@ -31,23 +31,32 @@ type RPCServer struct {
 type BitcoinNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	RPCServer     RPCServer `json:"rpcServer,omitempty"`
-	MiningAddress string    `json:"miningAddress,omitempty"`
+
+	// Configuration for the RPC Server
+	RPCServer RPCServer `json:"rpcServer,omitempty"`
 
 	// Host and port of peer to connect
 	// +optional
 	Peer string `json:"peer,omitempty"`
+
+	// CPU Mining Enabled
+	// +kubebuilder:default:=false
+	MiningEnabled bool `json:"miningEnabled,omitempty"`
+
+	// Address the should receive block rewards
+	// +optional
+	MiningAddress string `json:"miningAddress,omitempty"`
 
 	// Minimum number of blocks to mine on initial startup
 	// +optional
 	// +kubebuilder:default:=0
 	MinBlocks int64 `json:"minBlocks,omitempty"`
 
-	// CPU Mining Enabled
-	// +kubebuilder:default:=false
-	MiningEnabled bool `json:"miningEnabled,omitempty"`
+	// Number of seconds to wait between scheduled block generation
+	// +optional
+	SecondsPerBlock int64 `json:"secondsPerBlock,omitempty"`
 
-	// The compute resource requirements.
+	// The compute resource requirements
 	// +optional
 	// +kubebuilder:default:={limits: {cpu: "100m", memory: "1Gi"}, requests: {cpu: "50m", memory: "200Mi"}}
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
