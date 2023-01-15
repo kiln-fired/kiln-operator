@@ -3,8 +3,10 @@ kind: BitcoinNode
 metadata:
   name: btcd
 spec:
-  miningEnabled: true
+  miningEnabled: false
   miningAddress: rhLmdkndRELHhHAUnSut5PhFZ8do8aNMk4
+  minBlocks: 400
+  secondsPerBlock: 10
   rpcServer:
     certSecret: btcd-rpc-tls
     user: node-user
