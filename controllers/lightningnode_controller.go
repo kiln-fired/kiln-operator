@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"k8s.io/utils/pointer"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -175,6 +176,13 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 								Name:  "BACKEND",
 								Value: "btcd",
 							},
+						},
+						SecurityContext: &corev1.SecurityContext{
+							Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+							Privileged:               pointer.Bool(false),
+							RunAsNonRoot:             pointer.Bool(true),
+							AllowPrivilegeEscalation: pointer.Bool(false),
+							SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 						},
 						VolumeMounts: []corev1.VolumeMount{
 							{

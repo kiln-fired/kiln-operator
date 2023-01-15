@@ -27,27 +27,43 @@ type RPCServer struct {
 	Password   string `json:"password,omitempty"`
 }
 
-// BitcoinNodeSpec defines the desired state of BitcoinNode
-type BitcoinNodeSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	RPCServer     RPCServer `json:"rpcServer,omitempty"`
-	MiningAddress string    `json:"miningAddress,omitempty"`
+type Mining struct {
+	// CPU Mining Enabled
+	// +kubebuilder:default:=false
+	CpuMiningEnabled bool `json:"cpuMiningEnabled,omitempty"`
 
-	// Host and port of peer to connect
+	// Address the should receive block rewards
 	// +optional
-	Peer string `json:"peer,omitempty"`
+	RewardAddress string `json:"rewardAddress,omitempty"`
 
 	// Minimum number of blocks to mine on initial startup
 	// +optional
 	// +kubebuilder:default:=0
 	MinBlocks int64 `json:"minBlocks,omitempty"`
 
-	// CPU Mining Enabled
-	// +kubebuilder:default:=false
-	MiningEnabled bool `json:"miningEnabled,omitempty"`
+	// Number of seconds to wait between scheduled block generation
+	// +optional
+	// +kubebuilder:default:=0
+	SecondsPerBlock int64 `json:"secondsPerBlock,omitempty"`
+}
 
-	// The compute resource requirements.
+// BitcoinNodeSpec defines the desired state of BitcoinNode
+type BitcoinNodeSpec struct {
+	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
+
+	// Configuration for the RPC Server
+	RPCServer RPCServer `json:"rpcServer,omitempty"`
+
+	// Host and port of peer to connect
+	// +optional
+	Peer string `json:"peer,omitempty"`
+
+	// Mining configuration
+	// +optional
+	Mining Mining `json:"mining,omitempty"`
+
+	// The compute resource requirements
 	// +optional
 	// +kubebuilder:default:={limits: {cpu: "100m", memory: "1Gi"}, requests: {cpu: "50m", memory: "200Mi"}}
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
@@ -57,7 +73,7 @@ type BitcoinNodeSpec struct {
 type BitcoinNodeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	BlockCount int64 `json:"blockCount"`
+	LastBlockCount int64 `json:"LastBlockCount"`
 }
 
 //+kubebuilder:object:root=true
