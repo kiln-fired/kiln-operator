@@ -14,7 +14,7 @@ A Kubernetes operator for managing the state of Bitcoin and Lightning nodes.
 
 ## Development
 
-This operator follows the conventions describe in the [Operator SDK Go Tutorial](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/).
+This operator follows the conventions described in the [Operator SDK Go Tutorial](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/).
 
 When modifying resource type definitions, run the following command to generate code for the modified resource:
 

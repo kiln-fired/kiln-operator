@@ -275,5 +275,7 @@ func labelsForLightningNode(name string) map[string]string {
 func (r *LightningNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bitcoinv1alpha1.LightningNode{}).
+		Owns(&appsv1.StatefulSet{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
 }
