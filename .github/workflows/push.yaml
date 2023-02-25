@@ -43,7 +43,7 @@ jobs:
           password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: publish operator image
-        uses: docker/build-push-action@v2.7.0
+        uses: docker/build-push-action@v3
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/Dockerfile
@@ -56,7 +56,7 @@ jobs:
         run: make bundle IMG=quay.io/kiln-fired/kiln-operator:latest VERSION=0.0.1 DEFAULT_CHANNEL=alpha
 
       - name: publish bundle image
-        uses: docker/build-push-action@v2.7.0
+        uses: docker/build-push-action@v3
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/bundle.Dockerfile
