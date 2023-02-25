@@ -2,4 +2,5 @@
 resources:
 - bitcoin_v1alpha1_bitcoinnode.yaml
 - bitcoin_v1alpha1_lightningnode.yaml
+- bitcoin_v1alpha1_chainkey.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

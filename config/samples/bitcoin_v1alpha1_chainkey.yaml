@@ -1,0 +1,12 @@
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: ChainKey
+metadata:
+  labels:
+    app.kubernetes.io/name: chainkey
+    app.kubernetes.io/instance: chainkey-sample
+    app.kubernetes.io/part-of: kiln-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: kiln-operator
+  name: chainkey-sample
+spec:
+  # TODO(user): Add fields here

@@ -25,4 +25,13 @@ resources:
   kind: LightningNode
   path: github.com/kiln-fired/kiln-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: kiln-fired.github.io
+  group: bitcoin
+  kind: ChainKey
+  path: github.com/kiln-fired/kiln-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"
