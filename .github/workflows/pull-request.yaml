@@ -14,7 +14,7 @@ jobs:
       - name: install go
         uses: actions/setup-go@v2
         with:
-          go-version: ^1.18
+          go-version: ^1.19
 
       - name: check out code
         uses: actions/checkout@v2
@@ -23,7 +23,7 @@ jobs:
         run: |
           # Create Binary Directory
           mkdir -p bin
-          curl -L -o bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v1.18.1/operator-sdk_linux_amd64
+          curl -L -o bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v1.27.0/operator-sdk_linux_amd64
           make controller-gen
           make kustomize
           echo bin >> $GITHUB_PATH
@@ -34,7 +34,7 @@ jobs:
         run:  make build
 
       - name: build operator image
-        uses: docker/build-push-action@v2.7.0
+        uses: docker/build-push-action@v3
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/Dockerfile
@@ -47,7 +47,7 @@ jobs:
         run: make bundle IMG=quay.io/kiln-fired/kiln-operator:latest VERSION=0.0.1 DEFAULT_CHANNEL=alpha
 
       - name: build bundle image
-        uses: docker/build-push-action@v2.7.0
+        uses: docker/build-push-action@v3
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/bundle.Dockerfile
