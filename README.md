@@ -9,14 +9,8 @@ A Kubernetes operator for managing the state of Bitcoin and Lightning nodes.
 ## System Requirements
 
 1. A Kubernetes client and compatible cluster
-2. The Go programming language `v1.16`
+2. Go  `v1.19`
 3. Docker `v17.03+`
-
-From a fresh Fedora 35 install:
-
-```shell
-sudo dnf install golang kubernetes-client
-````
 
 ## Development
 
@@ -58,11 +52,9 @@ make docker-push IMG=quay.io/$repo/kiln-operator:latest
 ```shell
 make manifests
 make bundle IMG=quay.io/$repo/kiln-operator:latest
-# TODO: needs icon
 operator-sdk bundle validate ./bundle --select-optional name=operatorhub
 make bundle-build BUNDLE_IMG=quay.io/$repo/kiln-operator-bundle:latest
 docker push quay.io/$repo/kiln-operator-bundle:latest
-# TODO: needs icon
 operator-sdk bundle validate quay.io/$repo/kiln-operator-bundle:latest --select-optional name=operatorhub
 oc new-project kiln-operator
 oc label namespace kiln-operator openshift.io/cluster-monitoring="true"
