@@ -1,0 +1,9 @@
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: ChainKey
+metadata:
+  name: ecommerce-wallet
+spec:
+  secretName: ecommerce-chainkey
+  Mnemonic: "voyage blind unit shoulder yellow attitude mule all hire above obvious swap"
+  Passphrase: "123456"
+  Network: mainnet
