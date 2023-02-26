@@ -33,6 +33,10 @@ jobs:
         shell: bash
         run:  make build
 
+      - name: run controller tests
+        shell: bash
+        run:  make test
+
       - name: build operator image
         uses: docker/build-push-action@v3
         with:
