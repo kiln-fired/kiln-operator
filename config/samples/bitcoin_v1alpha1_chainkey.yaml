@@ -3,7 +3,7 @@ kind: ChainKey
 metadata:
   name: ecommerce-wallet
 spec:
-  secretName: ecommerce-chainkey
+  secretName: chainkey-secret
   Mnemonic: "voyage blind unit shoulder yellow attitude mule all hire above obvious swap"
   Passphrase: "123456"
   Network: mainnet

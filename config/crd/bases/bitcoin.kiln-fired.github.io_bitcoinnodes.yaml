@@ -49,7 +49,16 @@ spec:
                     type: integer
                   rewardAddress:
                     description: Address the should receive block rewards
-                    type: string
+                    properties:
+                      secretKey:
+                        default: bip49address
+                        description: Name of the secret key that contains the reward
+                          address
+                        type: string
+                      secretName:
+                        description: Name of the secret that contains the reward address
+                        type: string
+                    type: object
                   secondsPerBlock:
                     default: 0
                     description: Number of seconds to wait between scheduled block
@@ -117,10 +126,14 @@ spec:
                 description: Configuration for the RPC Server
                 properties:
                   certSecret:
+                    description: Name of the secret that contains TLS certificates
+                      for the RPC server
                     type: string
                   password:
+                    description: Password to authenticate to the RPC server
                     type: string
                   user:
+                    description: Username to authenticate to the RPC server
                     type: string
                 type: object
             type: object

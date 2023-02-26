@@ -5,7 +5,8 @@ metadata:
 spec:
   mining:
     cpuMiningEnabled: false
-    rewardAddress: rhLmdkndRELHhHAUnSut5PhFZ8do8aNMk4
+    rewardAddress:
+      SecretName: chainkey-secret
     minBlocks: 400
     secondsPerBlock: 10
   rpcServer:
