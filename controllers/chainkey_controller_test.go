@@ -14,7 +14,7 @@ import (
 	bitcoinv1alpha1 "github.com/kiln-fired/kiln-operator/api/v1alpha1"
 )
 
-var _ = Describe("Chainkey controller", func() {
+var _ = Describe("ChainKey controller", func() {
 
 	const Namespace = "test-namespace"
 	const ChainKeyName = "test"
@@ -30,7 +30,7 @@ var _ = Describe("Chainkey controller", func() {
 	secretNamespacedName := types.NamespacedName{Namespace: Namespace, Name: SecretName}
 
 	BeforeEach(func() {
-		By("Creating namespace to perform the tests")
+		By("creating namespace to perform the tests")
 		_ = k8sClient.Create(ctx, &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      Namespace,
@@ -40,14 +40,14 @@ var _ = Describe("Chainkey controller", func() {
 	})
 
 	AfterEach(func() {
-		By("Cleaning up ChainKey")
+		By("cleaning up ChainKey")
 		chainKey := &bitcoinv1alpha1.ChainKey{}
 		err := k8sClient.Get(ctx, chainKeyNamespaceName, chainKey)
 		Expect(err).To(Not(HaveOccurred()))
 		err = k8sClient.Delete(ctx, chainKey)
 		Expect(err).To(Not(HaveOccurred()))
 
-		By("Cleaning up Secret")
+		By("cleaning up Secret")
 		secret := &v1.Secret{}
 		err = k8sClient.Get(ctx, secretNamespacedName, secret)
 		Expect(err).To(Not(HaveOccurred()))
@@ -55,113 +55,61 @@ var _ = Describe("Chainkey controller", func() {
 		Expect(err).To(Not(HaveOccurred()))
 	})
 
-	It("Should successfully reconcile a custom resource for ChainKey", func() {
+	DescribeTable("reconciling a ChainKey instance",
+		func(network string, bip49address string) {
 
-		chainKey := &bitcoinv1alpha1.ChainKey{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ChainKeyName,
-				Namespace: Namespace,
-			},
-			Spec: bitcoinv1alpha1.ChainKeySpec{
-				SecretName: SecretName,
-				Mnemonic:   Mnemonic,
-				Passphrase: Passphrase,
-				Network:    "simnet",
-			},
-		}
-		bip49address := "rkGVuzRRdpU9pUjXnLuKQUeFDfmNT47kuW"
+			chainKey := &bitcoinv1alpha1.ChainKey{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ChainKeyName,
+					Namespace: Namespace,
+				},
+				Spec: bitcoinv1alpha1.ChainKeySpec{
+					SecretName: SecretName,
+					Mnemonic:   Mnemonic,
+					Passphrase: Passphrase,
+					Network:    network,
+				},
+			}
 
-		By("Creating the custom resource for the kind ChainKey")
-		err := k8sClient.Create(ctx, chainKey)
-		Expect(err).To(Not(HaveOccurred()))
+			By("creating the custom resource for the kind ChainKey")
+			err := k8sClient.Create(ctx, chainKey)
+			Expect(err).To(Not(HaveOccurred()))
 
-		By("Checking if the custom resource was successfully created")
-		Eventually(func() error {
-			foundChainKey := &bitcoinv1alpha1.ChainKey{}
-			return k8sClient.Get(ctx, chainKeyNamespaceName, foundChainKey)
-		}, time.Minute, time.Second).Should(Succeed())
+			By("checking if the custom resource was successfully created")
+			Eventually(func() error {
+				foundChainKey := &bitcoinv1alpha1.ChainKey{}
+				return k8sClient.Get(ctx, chainKeyNamespaceName, foundChainKey)
+			}, time.Minute, time.Second).Should(Succeed())
 
-		By("Reconciling the custom resource created")
-		chainKeyReconciler := ChainKeyReconciler{
-			Client: k8sClient,
-			Scheme: k8sClient.Scheme(),
-		}
-		_, err = chainKeyReconciler.Reconcile(ctx, reconcile.Request{
-			NamespacedName: chainKeyNamespaceName,
-		})
-		Expect(err).To(Not(HaveOccurred()))
+			By("reconciling the custom resource created")
+			chainKeyReconciler := ChainKeyReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err = chainKeyReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: chainKeyNamespaceName,
+			})
+			Expect(err).To(Not(HaveOccurred()))
 
-		By("Checking if a secret was successfully created in the reconciliation")
-		foundSecret := &v1.Secret{}
-		Eventually(func() error {
-			return k8sClient.Get(ctx, secretNamespacedName, foundSecret)
-		}, time.Minute, time.Second).Should(Succeed())
+			By("checking if a secret was successfully created in the reconciliation")
+			foundSecret := &v1.Secret{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, secretNamespacedName, foundSecret)
+			}, time.Minute, time.Second).Should(Succeed())
 
-		By("Checking if the seed and passphrase resulted in the expected key pair")
-		Eventually(func() error {
-			Expect(foundSecret.Data).To(Not(BeEmpty()))
-			Expect(foundSecret.Data["masterPrivateKey"]).To(Not(BeEmpty()))
-			Expect(foundSecret.Data["masterPrivateKey"]).To(Equal([]byte(MasterPrivateKey)))
-			Expect(foundSecret.Data["masterPublicKey"]).To(Not(BeEmpty()))
-			Expect(foundSecret.Data["masterPublicKey"]).To(Equal([]byte(MasterPublicKey)))
-			Expect(foundSecret.Data["bip49Address"]).To(Not(BeEmpty()))
-			Expect(foundSecret.Data["bip49Address"]).To(Equal([]byte(bip49address)))
-			return nil
-		}, time.Minute, time.Second).Should(Succeed())
-	})
-
-	It("Should successfully reconcile a custom resource for a mainnet ChainKey", func() {
-
-		chainKey := &bitcoinv1alpha1.ChainKey{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ChainKeyName,
-				Namespace: Namespace,
-			},
-			Spec: bitcoinv1alpha1.ChainKeySpec{
-				SecretName: SecretName,
-				Mnemonic:   Mnemonic,
-				Passphrase: Passphrase,
-				Network:    "mainnet",
-			},
-		}
-		bip49address := "3GPKjBFRrXnmKLHJtqbiBgXQx9N4UQQ1m3"
-
-		By("Creating the custom resource for the kind ChainKey")
-		err := k8sClient.Create(ctx, chainKey)
-		Expect(err).To(Not(HaveOccurred()))
-
-		By("Checking if the custom resource was successfully created")
-		Eventually(func() error {
-			foundChainKey := &bitcoinv1alpha1.ChainKey{}
-			return k8sClient.Get(ctx, chainKeyNamespaceName, foundChainKey)
-		}, time.Minute, time.Second).Should(Succeed())
-
-		By("Reconciling the custom resource created")
-		chainKeyReconciler := ChainKeyReconciler{
-			Client: k8sClient,
-			Scheme: k8sClient.Scheme(),
-		}
-		_, err = chainKeyReconciler.Reconcile(ctx, reconcile.Request{
-			NamespacedName: chainKeyNamespaceName,
-		})
-		Expect(err).To(Not(HaveOccurred()))
-
-		By("Checking if a secret was successfully created in the reconciliation")
-		foundSecret := &v1.Secret{}
-		Eventually(func() error {
-			return k8sClient.Get(ctx, secretNamespacedName, foundSecret)
-		}, time.Minute, time.Second).Should(Succeed())
-
-		By("Checking if the seed and passphrase resulted in the expected key pair")
-		Eventually(func() error {
-			Expect(foundSecret.Data).To(Not(BeEmpty()))
-			Expect(foundSecret.Data["masterPrivateKey"]).To(Not(BeEmpty()))
-			Expect(foundSecret.Data["masterPrivateKey"]).To(Equal([]byte(MasterPrivateKey)))
-			Expect(foundSecret.Data["masterPublicKey"]).To(Not(BeEmpty()))
-			Expect(foundSecret.Data["masterPublicKey"]).To(Equal([]byte(MasterPublicKey)))
-			Expect(foundSecret.Data["bip49Address"]).To(Not(BeEmpty()))
-			Expect(foundSecret.Data["bip49Address"]).To(Equal([]byte(bip49address)))
-			return nil
-		}, time.Minute, time.Second).Should(Succeed())
-	})
+			By("checking if the seed and passphrase resulted in the expected key pair")
+			Eventually(func() error {
+				Expect(foundSecret.Data).To(Not(BeEmpty()))
+				Expect(foundSecret.Data["masterPrivateKey"]).To(Not(BeEmpty()))
+				Expect(foundSecret.Data["masterPrivateKey"]).To(Equal([]byte(MasterPrivateKey)))
+				Expect(foundSecret.Data["masterPublicKey"]).To(Not(BeEmpty()))
+				Expect(foundSecret.Data["masterPublicKey"]).To(Equal([]byte(MasterPublicKey)))
+				Expect(foundSecret.Data["bip49Address"]).To(Not(BeEmpty()))
+				Expect(foundSecret.Data["bip49Address"]).To(Equal([]byte(bip49address)))
+				return nil
+			}, time.Minute, time.Second).Should(Succeed())
+		},
+		Entry("when configuration specifies simnet", "simnet", "rkGVuzRRdpU9pUjXnLuKQUeFDfmNT47kuW"),
+		Entry("when configuration specifies mainnet", "mainnet", "3GPKjBFRrXnmKLHJtqbiBgXQx9N4UQQ1m3"),
+	)
 })
