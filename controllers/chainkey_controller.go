@@ -96,13 +96,22 @@ func (r *ChainKeyReconciler) secretForChainKey(c *bitcoinv1alpha1.ChainKey) *v1.
 	changeKey, _ := accountKey.NewChildKey(0)                      // external
 	key, _ := changeKey.NewChildKey(0)                             // first
 
+	var networkParams *chaincfg.Params
+
+	switch c.Spec.Network {
+	case "simnet":
+		networkParams = &chaincfg.SimNetParams
+	case "mainnet":
+		networkParams = &chaincfg.MainNetParams
+	}
+
 	privateKeyBytes, _ := btcec.PrivKeyFromBytes(key.Key)
-	btcwif, _ := btcutil.NewWIF(privateKeyBytes, &chaincfg.MainNetParams, true)
+	btcwif, _ := btcutil.NewWIF(privateKeyBytes, networkParams, true)
 	serializedPubKey := btcwif.SerializePubKey()
 	witnessProg := btcutil.Hash160(serializedPubKey)
-	addressWitnessPubKeyHash, _ := btcutil.NewAddressWitnessPubKeyHash(witnessProg, &chaincfg.MainNetParams)
+	addressWitnessPubKeyHash, _ := btcutil.NewAddressWitnessPubKeyHash(witnessProg, networkParams)
 	serializedScript, _ := txscript.PayToAddrScript(addressWitnessPubKeyHash)
-	addressScriptHash, _ := btcutil.NewAddressScriptHash(serializedScript, &chaincfg.MainNetParams)
+	addressScriptHash, _ := btcutil.NewAddressScriptHash(serializedScript, networkParams)
 	segwitNested := addressScriptHash.EncodeAddress()
 
 	secret := v1.Secret{
