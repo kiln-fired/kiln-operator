@@ -225,8 +225,15 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 									Value: b.Spec.RPCServer.Password,
 								},
 								{
-									Name:  "MINING_ADDRESS",
-									Value: b.Spec.Mining.RewardAddress,
+									Name: "MINING_ADDRESS",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: b.Spec.Mining.RewardAddress.SecretName,
+											},
+											Key: b.Spec.Mining.RewardAddress.SecretKey,
+										},
+									},
 								},
 							},
 							SecurityContext: &corev1.SecurityContext{
@@ -295,10 +302,6 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 								{
 									Name:  "RPCPASS",
 									Value: b.Spec.RPCServer.Password,
-								},
-								{
-									Name:  "MINING_ADDRESS",
-									Value: b.Spec.Mining.RewardAddress,
 								},
 							},
 							SecurityContext: &corev1.SecurityContext{

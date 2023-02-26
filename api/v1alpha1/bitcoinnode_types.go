@@ -22,9 +22,24 @@ import (
 )
 
 type RPCServer struct {
+	// Name of the secret that contains TLS certificates for the RPC server
 	CertSecret string `json:"certSecret,omitempty"`
-	User       string `json:"user,omitempty"`
-	Password   string `json:"password,omitempty"`
+
+	// Username to authenticate to the RPC server
+	User string `json:"user,omitempty"`
+
+	// Password to authenticate to the RPC server
+	Password string `json:"password,omitempty"`
+}
+
+type RewardAddress struct {
+	// Name of the secret that contains the reward address
+	SecretName string `json:"secretName,omitempty"`
+
+	// Name of the secret key that contains the reward address
+	// +optional
+	// +kubebuilder:default:="bip49address"
+	SecretKey string `json:"secretKey,omitempty"`
 }
 
 type Mining struct {
@@ -34,7 +49,7 @@ type Mining struct {
 
 	// Address the should receive block rewards
 	// +optional
-	RewardAddress string `json:"rewardAddress,omitempty"`
+	RewardAddress RewardAddress `json:"rewardAddress,omitempty"`
 
 	// Minimum number of blocks to mine on initial startup
 	// +optional
