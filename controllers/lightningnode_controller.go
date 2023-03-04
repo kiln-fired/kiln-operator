@@ -150,7 +150,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 						Name:    "lnd",
 						Command: []string{"lnd"},
 						Args: []string{
-							"lnd",
+							"--wallet-unlock-password-file=/secret/wallet-password",
 							"--noseedbackup",
 							"--$(CHAIN).active",
 							"--$(CHAIN).$(NETWORK)",

@@ -103,26 +103,6 @@ var _ = Describe("LightningNode controller", func() {
 		}, time.Minute, time.Second).Should(Succeed())
 
 		By("checking if the wallet password is referenced and mounted")
-		//Eventually(func() error {
-		//	walletPasswordEnvExists := false
-		//	for _, container := range foundStatefulSet.Spec.Template.Spec.Containers {
-		//		if container.Name == "lnd" {
-		//			for _, env := range container.Env {
-		//				if env.Name == "WALLET_PASSWORD" {
-		//					walletPasswordEnvExists = true
-		//					Expect(env.ValueFrom).To(Not(BeNil()))
-		//					Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Not(BeEmpty()))
-		//					Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Equal(lightningNode.Spec.Wallet.Password.SecretName))
-		//					Expect(env.ValueFrom.SecretKeyRef.Key).To(Not(BeEmpty()))
-		//					Expect(env.ValueFrom.SecretKeyRef.Key).To(Equal(lightningNode.Spec.Wallet.Password.SecretKey))
-		//				}
-		//			}
-		//		}
-		//	}
-		//	Expect(walletPasswordEnvExists).To(BeTrue())
-		//	return nil
-		//}, time.Minute, time.Second).Should(Succeed())
-
 		Eventually(func() error {
 			volumeExists := false
 			mainVolumeMountExists := false
@@ -188,7 +168,7 @@ var _ = Describe("LightningNode controller", func() {
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
 
-		By("checking if the init container is configured")
+		By("checking if the container arguments are configured with a wallet password")
 		Eventually(func() error {
 			Expect(foundStatefulSet.Spec.Template.Spec.InitContainers).To(Not(BeEmpty()))
 			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
@@ -196,6 +176,11 @@ var _ = Describe("LightningNode controller", func() {
 					Expect(container.Args[0]).To(Equal("init"))
 					Expect(container.Args[3]).To(ContainSubstring("/secret/seed"))
 					Expect(container.Args[4]).To(ContainSubstring("/secret/wallet-password"))
+				}
+			}
+			for _, container := range foundStatefulSet.Spec.Template.Spec.Containers {
+				if container.Name == "lnd" {
+					Expect(container.Args[0]).To(ContainSubstring("/secret/wallet-password"))
 				}
 			}
 			return nil
