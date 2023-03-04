@@ -173,7 +173,7 @@ var _ = Describe("LightningNode controller", func() {
 			Expect(foundStatefulSet.Spec.Template.Spec.InitContainers).To(Not(BeEmpty()))
 			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
 				if container.Name == "lnd-init" {
-					Expect(container.Args[0]).To(Equal("init"))
+					Expect(container.Args[0]).To(Equal("init-wallet"))
 					Expect(container.Args[3]).To(ContainSubstring("/secret/seed"))
 					Expect(container.Args[4]).To(ContainSubstring("/secret/wallet-password"))
 				}

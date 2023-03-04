@@ -127,9 +127,9 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 					InitContainers: []corev1.Container{{
 						Image:   "docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta",
 						Name:    "lnd-init",
-						Command: []string{"lnd-init"},
+						Command: []string{"lndinit"},
 						Args: []string{
-							"init",
+							"init-wallet",
 							"-v",
 							"--secret-source=file",
 							"--file.seed=/secret/seed",
