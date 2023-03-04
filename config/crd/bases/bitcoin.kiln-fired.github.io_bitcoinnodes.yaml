@@ -51,7 +51,7 @@ spec:
                     description: Address the should receive block rewards
                     properties:
                       secretKey:
-                        default: bip49address
+                        default: bip49Address
                         description: Name of the secret key that contains the reward
                           address
                         type: string
