@@ -36,20 +36,57 @@ spec:
             description: LightningNodeSpec defines the desired state of LightningNode
             properties:
               bitcoinConnection:
+                description: Configuration for the Bitcoin RPC client
                 properties:
                   certSecret:
+                    description: Name of the secret that contains TLS certificates
+                      for the RPC server
                     type: string
                   host:
+                    description: Hostname of the Bitcoin node RPC endpoint
                     type: string
                   network:
+                    default: simnet
+                    description: Bitcoin network, e.g. simnet, testnet, regressionnet,
+                      mainnet
                     type: string
                   password:
+                    description: Password to authenticate to the RPC server
                     type: string
                   user:
+                    description: Username to authenticate to the RPC server
                     type: string
                 required:
                 - host
                 - network
+                type: object
+              wallet:
+                description: Configuration for the wallet
+                properties:
+                  password:
+                    description: Wallet password
+                    properties:
+                      secretKey:
+                        description: Name of the secret key that contains the wallet
+                          password
+                        type: string
+                      secretName:
+                        description: Name of the secret that contains the Lightning
+                          wallet password
+                        type: string
+                    type: object
+                  seed:
+                    description: Seed to import to the wallet
+                    properties:
+                      secretKey:
+                        default: seed
+                        description: Name of the secret key that contains the seed
+                        type: string
+                      secretName:
+                        description: Name of the secret that contains the seed to
+                          import
+                        type: string
+                    type: object
                 type: object
             type: object
           status:

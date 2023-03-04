@@ -21,11 +21,46 @@ import (
 )
 
 type BitcoinConnection struct {
-	Host       string `json:"host,omitEmpty"`
-	Network    string `json:"network,omitEmpty"`
+	// Hostname of the Bitcoin node RPC endpoint
+	Host string `json:"host,omitEmpty"`
+
+	// Bitcoin network, e.g. simnet, testnet, regressionnet, mainnet
+	// +kubebuilder:default:="simnet"
+	Network string `json:"network,omitEmpty"`
+
+	// Name of the secret that contains TLS certificates for the RPC server
 	CertSecret string `json:"certSecret,omitempty"`
-	User       string `json:"user,omitempty"`
-	Password   string `json:"password,omitempty"`
+
+	// Username to authenticate to the RPC server
+	User string `json:"user,omitempty"`
+
+	// Password to authenticate to the RPC server
+	Password string `json:"password,omitempty"`
+}
+
+type WalletPassword struct {
+	// Name of the secret that contains the Lightning wallet password
+	SecretName string `json:"secretName,omitempty"`
+
+	// Name of the secret key that contains the wallet password
+	SecretKey string `json:"secretKey,omitempty"`
+}
+
+type SeedImport struct {
+	// Name of the secret that contains the seed to import
+	SecretName string `json:"secretName,omitempty"`
+
+	// Name of the secret key that contains the seed
+	// +kubebuilder:default:="seed"
+	SecretKey string `json:"secretKey,omitempty"`
+}
+
+type Wallet struct {
+	// Wallet password
+	Password WalletPassword `json:"password,omitempty"`
+
+	// Seed to import to the wallet
+	Seed SeedImport `json:"seed,omitempty"`
 }
 
 // LightningNodeSpec defines the desired state of LightningNode
@@ -33,7 +68,11 @@ type LightningNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// Configuration for the Bitcoin RPC client
 	BitcoinConnection BitcoinConnection `json:"bitcoinConnection,omitempty"`
+
+	// Configuration for the wallet
+	Wallet Wallet `json:"wallet,omitempty"`
 }
 
 // LightningNodeStatus defines the observed state of LightningNode

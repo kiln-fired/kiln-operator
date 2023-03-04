@@ -40,6 +40,13 @@ var _ = Describe("BitcoinNode controller", func() {
 		Expect(err).To(Not(HaveOccurred()))
 		err = k8sClient.Delete(ctx, bitcoinNode)
 		Expect(err).To(Not(HaveOccurred()))
+
+		By("cleaning up StatefulSet")
+		statefulSet := &appsv1.StatefulSet{}
+		err = k8sClient.Get(ctx, statefulSetNamespaceName, statefulSet)
+		Expect(err).To(Not(HaveOccurred()))
+		err = k8sClient.Delete(ctx, statefulSet)
+		Expect(err).To(Not(HaveOccurred()))
 	})
 
 	It("should reconcile the BitcoinNode instance", func() {
@@ -86,7 +93,7 @@ var _ = Describe("BitcoinNode controller", func() {
 		})
 		Expect(err).To(Not(HaveOccurred()))
 
-		By("checking if a secret was successfully created in the reconciliation")
+		By("checking if a statefulset was successfully created in the reconciliation")
 		foundStatefulSet := &appsv1.StatefulSet{}
 		Eventually(func() error {
 			return k8sClient.Get(ctx, statefulSetNamespaceName, foundStatefulSet)

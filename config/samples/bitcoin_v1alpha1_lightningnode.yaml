@@ -9,3 +9,9 @@ spec:
     certSecret: btcd-rpc-tls
     user: node-user
     password: st4cks4ts
+  wallet:
+    password:
+      secretName: alice-wallet
+      secretKey: password
+    seed:
+      secretName: mining-wallet
