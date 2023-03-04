@@ -124,6 +124,27 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{{
+						Image:   "docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta",
+						Name:    "lnd-init",
+						Command: []string{"lnd-init"},
+						Args: []string{
+							"init",
+							"-v",
+							"--secret-source=file",
+							"--file.seed=/secret/seed",
+							"--file.wallet-password=/secret/wallet-password",
+							"--init-file.output-wallet-dir=$HOME/.lnd/data/chain/bitcoin/simnet",
+							"--init-file.validate-password",
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "wallet-password",
+								MountPath: "/secret/wallet-password",
+								SubPath:   l.Spec.Wallet.Password.SecretKey,
+							},
+						},
+					}},
 					Containers: []corev1.Container{{
 						Image:   "quay.io/kiln-fired/lnd:latest",
 						Name:    "lnd",
@@ -193,16 +214,44 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 								MountPath: "/rpc/rpc.cert",
 								SubPath:   "tls.crt",
 							},
-						},
-					}},
-					Volumes: []corev1.Volume{{
-						Name: "rpc-cert",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: bitcoinCertSecret,
+							{
+								Name:      "seed",
+								MountPath: "/secret/seed",
+								SubPath:   "seed",
+							},
+							{
+								Name:      "wallet-password",
+								MountPath: "/secret/wallet-password",
+								SubPath:   l.Spec.Wallet.Password.SecretKey,
 							},
 						},
 					}},
+					Volumes: []corev1.Volume{
+						{
+							Name: "rpc-cert",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: bitcoinCertSecret,
+								},
+							},
+						},
+						{
+							Name: "seed",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: l.Spec.Wallet.Seed.SecretName,
+								},
+							},
+						},
+						{
+							Name: "wallet-password",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: l.Spec.Wallet.Password.SecretName,
+								},
+							},
+						},
+					},
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
