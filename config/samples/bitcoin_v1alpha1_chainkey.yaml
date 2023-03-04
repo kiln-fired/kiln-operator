@@ -4,6 +4,6 @@ metadata:
   name: mining-wallet
 spec:
   secretName: chainkey-secret
-  mnemonic: "voyage blind unit shoulder yellow attitude mule all hire above obvious swap"
-  passphrase: "123456"
-  network: mainnet
+  mnemonic: "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing screen patrol group space point ten exist slush involve unfold"
+  passphrase: "TREZOR"
+  network: simnet

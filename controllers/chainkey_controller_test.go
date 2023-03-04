@@ -19,11 +19,11 @@ var _ = Describe("ChainKey controller", func() {
 	const Namespace = "test-namespace"
 	const ChainKeyName = "test"
 	const SecretName = "chain-key"
-	const Mnemonic = "voyage blind unit shoulder yellow attitude mule all hire above obvious swap"
-	const Passphrase = "123456" // I've got the same combination on my luggage!
+	const Mnemonic = "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing screen patrol group space point ten exist slush involve unfold"
+	const Passphrase = "TREZOR"
 
-	const MasterPrivateKey = "xprv9s21ZrQH143K45MBGTeN7zrQxBgh7v3XNtAMrQvYBfm6xdtaVkjCFNyFHZ262PpMoiaA8JEFGUDPVV6qzB459nGgR1mjuigdTaG2NsKr5BG"
-	const MasterPublicKey = "xpub661MyMwAqRbcGZReNVBNV8o9WDXBXNmNk75xeoL9k1J5qSDj3J3SoBHj8rub9x5FDaWqmPEPoBm2zQNTLnkeA2mGbKVfGqXxH36GKtciwFB"
+	const MasterPrivateKey = "xprv9s21ZrQH143K39rnQJknpH1WEPFJrzmAqqasiDcVrNuk926oizzJDDQkdiTvNPr2FYDYzWgiMiC63YmfPAa2oPyNB23r2g7d1yiK6WpqaQS"
+	const MasterPublicKey = "xpub661MyMwAqRbcFdwFWLHoBQxEnR5oGTV2D4WUWc27QiSj1pRxGYJYm1jEUz3KV4t2ygrByvVkJDsjByE4jPQj1B4bNRwetbSAt6ynfJeD3MB"
 
 	ctx := context.Background()
 	chainKeyNamespaceName := types.NamespacedName{Namespace: Namespace, Name: ChainKeyName}
@@ -109,7 +109,7 @@ var _ = Describe("ChainKey controller", func() {
 				return nil
 			}, time.Minute, time.Second).Should(Succeed())
 		},
-		Entry("when configuration specifies simnet", "simnet", "rkGVuzRRdpU9pUjXnLuKQUeFDfmNT47kuW"),
-		Entry("when configuration specifies mainnet", "mainnet", "3GPKjBFRrXnmKLHJtqbiBgXQx9N4UQQ1m3"),
+		Entry("when configuration specifies simnet", "simnet", "raxKZPqkA2e747Ak3jFkX1N2i6o7FTYmg5"),
+		Entry("when configuration specifies mainnet", "mainnet", "3759NafkNjxiYxiXADx9JDFCSaPoRehteB"),
 	)
 })

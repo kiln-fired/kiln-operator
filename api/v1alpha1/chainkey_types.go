@@ -25,7 +25,7 @@ type ChainKeySpec struct {
 	// Name of secret to store master key, chain keypair, and chain address
 	SecretName string `json:"secretName"`
 
-	// BIP39 mnemonic phrase
+	// BIP39 mnemonic phrase (only 24-word format supported)
 	// +optional
 	Mnemonic string `json:"mnemonic,omitempty"`
 
