@@ -185,6 +185,42 @@ var _ = Describe("LightningNode controller", func() {
 			}
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
+
+		By("checking if the pvc is mounted")
+		Eventually(func() error {
+			volumeClaimTemplateExists := false
+			mainVolumeMountExists := false
+			initVolumeMountExists := false
+
+			for _, volumeClaimTemplate := range foundStatefulSet.Spec.VolumeClaimTemplates {
+				if volumeClaimTemplate.Name == "lnd-home" {
+					volumeClaimTemplateExists = true
+					Expect(volumeClaimTemplate.ObjectMeta.Name).To(Equal("lnd-home"))
+				}
+			}
+			for _, container := range foundStatefulSet.Spec.Template.Spec.Containers {
+				if container.Name == "lnd" {
+					for _, volumeMount := range container.VolumeMounts {
+						if volumeMount.Name == "lnd-home" {
+							mainVolumeMountExists = true
+						}
+					}
+				}
+			}
+			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
+				if container.Name == "lnd-init" {
+					for _, volumeMount := range container.VolumeMounts {
+						if volumeMount.Name == "lnd-home" {
+							initVolumeMountExists = true
+						}
+					}
+				}
+			}
+			Expect(volumeClaimTemplateExists).To(BeTrue())
+			Expect(initVolumeMountExists).To(BeTrue())
+			Expect(mainVolumeMountExists).To(BeTrue())
+			return nil
+		}, time.Minute, time.Second).Should(Succeed())
 	})
 
 })

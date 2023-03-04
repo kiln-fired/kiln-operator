@@ -139,6 +139,10 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
+								Name:      "lnd-home",
+								MountPath: ".lnd",
+							},
+							{
 								Name:      "wallet-password",
 								MountPath: "/secret/wallet-password",
 								SubPath:   l.Spec.Wallet.Password.SecretKey,
