@@ -6,7 +6,7 @@ spec:
   mining:
     cpuMiningEnabled: false
     rewardAddress:
-      SecretName: chainkey-secret
+      secretName: chainkey-secret
     minBlocks: 400
     secondsPerBlock: 10
   rpcServer:
