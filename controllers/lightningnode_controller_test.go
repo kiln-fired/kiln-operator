@@ -157,7 +157,7 @@ var _ = Describe("LightningNode controller", func() {
 					for _, volumeMount := range container.VolumeMounts {
 						if volumeMount.Name == "chainkey" {
 							volumeMountExists = true
-							Expect(volumeMount.MountPath).To(Equal("/secret"))
+							Expect(volumeMount.MountPath).To(Equal("/secret/chainkey"))
 						}
 					}
 				}
@@ -173,8 +173,8 @@ var _ = Describe("LightningNode controller", func() {
 			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
 				if container.Name == "lnd-init" {
 					Expect(container.Args[0]).To(Equal("init-wallet"))
-					Expect(container.Args[3]).To(ContainSubstring("/secret/seedphrase"))
-					Expect(container.Args[4]).To(ContainSubstring("/secret/passphrase"))
+					Expect(container.Args[3]).To(ContainSubstring("/secret/chainkey/seedphrase"))
+					Expect(container.Args[4]).To(ContainSubstring("/secret/chainkey/passphrase"))
 					Expect(container.Args[5]).To(ContainSubstring("/secret/wallet-password"))
 				}
 			}
