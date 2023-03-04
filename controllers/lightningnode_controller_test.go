@@ -152,8 +152,8 @@ var _ = Describe("LightningNode controller", func() {
 					Expect(volume.VolumeSource.Secret.SecretName).To(Equal(lightningNode.Spec.Wallet.Seed.SecretName))
 				}
 			}
-			for _, container := range foundStatefulSet.Spec.Template.Spec.Containers {
-				if container.Name == "lnd" {
+			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
+				if container.Name == "lnd-init" {
 					for _, volumeMount := range container.VolumeMounts {
 						if volumeMount.Name == "seed" {
 							volumeMountExists = true

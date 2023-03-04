@@ -143,6 +143,11 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 								MountPath: ".lnd",
 							},
 							{
+								Name:      "seed",
+								MountPath: "/secret/seed",
+								SubPath:   "seed",
+							},
+							{
 								Name:      "wallet-password",
 								MountPath: "/secret/wallet-password",
 								SubPath:   l.Spec.Wallet.Password.SecretKey,
@@ -217,11 +222,6 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 								Name:      "rpc-cert",
 								MountPath: "/rpc/rpc.cert",
 								SubPath:   "tls.crt",
-							},
-							{
-								Name:      "seed",
-								MountPath: "/secret/seed",
-								SubPath:   "seed",
 							},
 							{
 								Name:      "wallet-password",
