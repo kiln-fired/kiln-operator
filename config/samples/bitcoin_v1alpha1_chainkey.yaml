@@ -1,7 +1,7 @@
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: ChainKey
 metadata:
-  name: ecommerce-wallet
+  name: mining-wallet
 spec:
   secretName: chainkey-secret
   mnemonic: "voyage blind unit shoulder yellow attitude mule all hire above obvious swap"
