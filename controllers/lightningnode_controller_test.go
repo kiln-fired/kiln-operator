@@ -142,12 +142,12 @@ var _ = Describe("LightningNode controller", func() {
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
 
-		By("checking for the seed volume and volume mount")
+		By("checking for the seed volume and volume mounts")
 		Eventually(func() error {
 			volumeExists := false
 			volumeMountExists := false
 			for _, volume := range foundStatefulSet.Spec.Template.Spec.Volumes {
-				if volume.Name == "seed" {
+				if volume.Name == "chainkey" {
 					volumeExists = true
 					Expect(volume.VolumeSource.Secret.SecretName).To(Equal(lightningNode.Spec.Wallet.Seed.SecretName))
 				}
@@ -155,10 +155,9 @@ var _ = Describe("LightningNode controller", func() {
 			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
 				if container.Name == "lnd-init" {
 					for _, volumeMount := range container.VolumeMounts {
-						if volumeMount.Name == "seed" {
+						if volumeMount.Name == "chainkey" {
 							volumeMountExists = true
-							Expect(volumeMount.MountPath).To(Equal("/secret/seed"))
-							Expect(volumeMount.SubPath).To(Equal("seed"))
+							Expect(volumeMount.MountPath).To(Equal("/secret"))
 						}
 					}
 				}
@@ -174,8 +173,9 @@ var _ = Describe("LightningNode controller", func() {
 			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
 				if container.Name == "lnd-init" {
 					Expect(container.Args[0]).To(Equal("init-wallet"))
-					Expect(container.Args[3]).To(ContainSubstring("/secret/seed"))
-					Expect(container.Args[4]).To(ContainSubstring("/secret/wallet-password"))
+					Expect(container.Args[3]).To(ContainSubstring("/secret/seedphrase"))
+					Expect(container.Args[4]).To(ContainSubstring("/secret/passphrase"))
+					Expect(container.Args[5]).To(ContainSubstring("/secret/wallet-password"))
 				}
 			}
 			for _, container := range foundStatefulSet.Spec.Template.Spec.Containers {
