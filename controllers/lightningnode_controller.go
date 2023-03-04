@@ -132,8 +132,8 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 							"init-wallet",
 							"-v",
 							"--secret-source=file",
-							"--file.seed=/secret/seedphrase",
-							"--file.seed-passphrase=/secret/passphrase",
+							"--file.seed=/secret/chainkey/seedphrase",
+							"--file.seed-passphrase=/secret/chainkey/passphrase",
 							"--file.wallet-password=/secret/wallet-password",
 							"--init-file.output-wallet-dir=$HOME/.lnd/data/chain/bitcoin/simnet",
 							"--init-file.validate-password",
@@ -145,7 +145,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 							},
 							{
 								Name:      "chainkey",
-								MountPath: "/secret",
+								MountPath: "/secret/chainkey",
 							},
 							{
 								Name:      "wallet-password",
