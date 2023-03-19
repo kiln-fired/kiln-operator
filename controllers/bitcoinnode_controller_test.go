@@ -66,9 +66,10 @@ var _ = Describe("BitcoinNode controller", func() {
 					SecondsPerBlock: 10,
 				},
 				RPCServer: bitcoinv1alpha1.RPCServer{
-					CertSecret: "btcd-rpc-tls",
-					User:       "node-user",
-					Password:   "st4cks4ts",
+					CertSecret:           "btcd-rpc-tls",
+					ApiAuthSecretName:    "btcd-rpc-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
 				},
 			},
 		}
@@ -117,6 +118,37 @@ var _ = Describe("BitcoinNode controller", func() {
 				}
 			}
 			Expect(miningAddressEnvExists).To(BeTrue())
+			return nil
+		}, time.Minute, time.Second).Should(Succeed())
+
+		By("checking if the rpc credentials are the expected secret references")
+		Eventually(func() error {
+			rpcUserEnvExists := false
+			rpcPassEnvExists := false
+			for _, container := range foundStatefulSet.Spec.Template.Spec.Containers {
+				if container.Name == "btcd" {
+					for _, env := range container.Env {
+						if env.Name == "RPCUSER" {
+							rpcUserEnvExists = true
+							Expect(env.ValueFrom).To(Not(BeNil()))
+							Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Not(BeEmpty()))
+							Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Equal(bitcoinNode.Spec.RPCServer.ApiAuthSecretName))
+							Expect(env.ValueFrom.SecretKeyRef.Key).To(Not(BeEmpty()))
+							Expect(env.ValueFrom.SecretKeyRef.Key).To(Equal(bitcoinNode.Spec.RPCServer.ApiUserSecretKey))
+						}
+						if env.Name == "RPCPASS" {
+							rpcPassEnvExists = true
+							Expect(env.ValueFrom).To(Not(BeNil()))
+							Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Not(BeEmpty()))
+							Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Equal(bitcoinNode.Spec.RPCServer.ApiAuthSecretName))
+							Expect(env.ValueFrom.SecretKeyRef.Key).To(Not(BeEmpty()))
+							Expect(env.ValueFrom.SecretKeyRef.Key).To(Equal(bitcoinNode.Spec.RPCServer.ApiPasswordSecretKey))
+						}
+					}
+				}
+			}
+			Expect(rpcUserEnvExists).To(BeTrue())
+			Expect(rpcPassEnvExists).To(BeTrue())
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
 	})
