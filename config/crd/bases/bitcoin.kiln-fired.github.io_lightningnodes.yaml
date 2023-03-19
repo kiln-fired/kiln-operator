@@ -38,6 +38,18 @@ spec:
               bitcoinConnection:
                 description: Configuration for the Bitcoin RPC client
                 properties:
+                  apiAuthSecretName:
+                    description: Name of the secret that contains bitcoin node RPC
+                      API credentials
+                    type: string
+                  apiPasswordSecretKey:
+                    description: Name of the secret key that contains bitcoin node
+                      RPC API password
+                    type: string
+                  apiUserSecretKey:
+                    description: Name of the secret key that contains bitcoin node
+                      RPC API username
+                    type: string
                   certSecret:
                     description: Name of the secret that contains TLS certificates
                       for the RPC server
@@ -50,13 +62,8 @@ spec:
                     description: Bitcoin network, e.g. simnet, testnet, regressionnet,
                       mainnet
                     type: string
-                  password:
-                    description: Password to authenticate to the RPC server
-                    type: string
-                  user:
-                    description: Username to authenticate to the RPC server
-                    type: string
                 required:
+                - apiAuthSecretName
                 - host
                 - network
                 type: object

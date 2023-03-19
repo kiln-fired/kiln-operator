@@ -7,8 +7,9 @@ spec:
     host: btcd
     network: simnet
     certSecret: btcd-rpc-tls
-    user: node-user
-    password: st4cks4ts
+    apiAuthSecretName: btcd-rpc-creds
+    apiUserSecretKey: username
+    apiPasswordSecretKey: password
   wallet:
     password:
       secretName: alice-wallet

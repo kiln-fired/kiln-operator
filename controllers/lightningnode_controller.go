@@ -102,12 +102,6 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 	ls := labelsForLightningNode(l.Name)
 	size := int32(1)
 
-	bitcoinHost := l.Spec.BitcoinConnection.Host
-	bitcoinNetwork := l.Spec.BitcoinConnection.Network
-	bitcoinCertSecret := l.Spec.BitcoinConnection.CertSecret
-	bitcoinUser := l.Spec.BitcoinConnection.User
-	bitcoinPass := l.Spec.BitcoinConnection.Password
-
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      l.Name,
@@ -182,19 +176,33 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 						Env: []corev1.EnvVar{
 							{
 								Name:  "NETWORK",
-								Value: bitcoinNetwork,
+								Value: l.Spec.BitcoinConnection.Network,
 							},
 							{
 								Name:  "RPCHOST",
-								Value: bitcoinHost,
+								Value: l.Spec.BitcoinConnection.Host,
 							},
 							{
-								Name:  "RPCUSER",
-								Value: bitcoinUser,
+								Name: "RPCUSER",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: l.Spec.BitcoinConnection.ApiAuthSecretName,
+										},
+										Key: l.Spec.BitcoinConnection.ApiUserSecretKey,
+									},
+								},
 							},
 							{
-								Name:  "RPCPASS",
-								Value: bitcoinPass,
+								Name: "RPCPASS",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: l.Spec.BitcoinConnection.ApiAuthSecretName,
+										},
+										Key: l.Spec.BitcoinConnection.ApiPasswordSecretKey,
+									},
+								},
 							},
 							{
 								Name:  "CHAIN",
@@ -234,7 +242,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 							Name: "rpc-cert",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: bitcoinCertSecret,
+									SecretName: l.Spec.BitcoinConnection.CertSecret,
 								},
 							},
 						},
