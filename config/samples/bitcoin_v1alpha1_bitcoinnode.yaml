@@ -11,5 +11,6 @@ spec:
     secondsPerBlock: 10
   rpcServer:
     certSecret: btcd-rpc-tls
-    user: node-user
-    password: st4cks4ts
+    apiAuthSecretName: btcd-rpc-creds
+    apiUserSecretKey: username
+    apiPasswordSecretKey: password

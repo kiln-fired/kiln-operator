@@ -31,11 +31,14 @@ type BitcoinConnection struct {
 	// Name of the secret that contains TLS certificates for the RPC server
 	CertSecret string `json:"certSecret,omitempty"`
 
-	// Username to authenticate to the RPC server
-	User string `json:"user,omitempty"`
+	// Name of the secret that contains bitcoin node RPC API credentials
+	ApiAuthSecretName string `json:"apiAuthSecretName,omiteempty"`
 
-	// Password to authenticate to the RPC server
-	Password string `json:"password,omitempty"`
+	// Name of the secret key that contains bitcoin node RPC API username
+	ApiUserSecretKey string `json:"apiUserSecretKey,omitempty"`
+
+	// Name of the secret key that contains bitcoin node RPC API password
+	ApiPasswordSecretKey string `json:"apiPasswordSecretKey,omitempty"`
 }
 
 type WalletPassword struct {

@@ -58,11 +58,12 @@ var _ = Describe("LightningNode controller", func() {
 			},
 			Spec: bitcoinv1alpha1.LightningNodeSpec{
 				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{
-					Host:       "btcd",
-					Network:    "simnet",
-					CertSecret: "btcd-rpc-tls",
-					User:       "node-user",
-					Password:   "st4cks4ts",
+					Host:                 "btcd",
+					Network:              "simnet",
+					CertSecret:           "btcd-rpc-tls",
+					ApiAuthSecretName:    "btcd-rpc-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
 				},
 				Wallet: bitcoinv1alpha1.Wallet{
 					Password: bitcoinv1alpha1.WalletPassword{
@@ -219,6 +220,37 @@ var _ = Describe("LightningNode controller", func() {
 			Expect(volumeClaimTemplateExists).To(BeTrue())
 			Expect(initVolumeMountExists).To(BeTrue())
 			Expect(mainVolumeMountExists).To(BeTrue())
+			return nil
+		}, time.Minute, time.Second).Should(Succeed())
+
+		By("checking if the bitcoin rpc credentials are the expected secret references")
+		Eventually(func() error {
+			rpcUserEnvExists := false
+			rpcPassEnvExists := false
+			for _, container := range foundStatefulSet.Spec.Template.Spec.Containers {
+				if container.Name == "lnd" {
+					for _, env := range container.Env {
+						if env.Name == "RPCUSER" {
+							rpcUserEnvExists = true
+							Expect(env.ValueFrom).To(Not(BeNil()))
+							Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Not(BeEmpty()))
+							Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Equal(lightningNode.Spec.BitcoinConnection.ApiAuthSecretName))
+							Expect(env.ValueFrom.SecretKeyRef.Key).To(Not(BeEmpty()))
+							Expect(env.ValueFrom.SecretKeyRef.Key).To(Equal(lightningNode.Spec.BitcoinConnection.ApiUserSecretKey))
+						}
+						if env.Name == "RPCPASS" {
+							rpcPassEnvExists = true
+							Expect(env.ValueFrom).To(Not(BeNil()))
+							Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Not(BeEmpty()))
+							Expect(env.ValueFrom.SecretKeyRef.LocalObjectReference.Name).To(Equal(lightningNode.Spec.BitcoinConnection.ApiAuthSecretName))
+							Expect(env.ValueFrom.SecretKeyRef.Key).To(Not(BeEmpty()))
+							Expect(env.ValueFrom.SecretKeyRef.Key).To(Equal(lightningNode.Spec.BitcoinConnection.ApiPasswordSecretKey))
+						}
+					}
+				}
+			}
+			Expect(rpcUserEnvExists).To(BeTrue())
+			Expect(rpcPassEnvExists).To(BeTrue())
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
 	})

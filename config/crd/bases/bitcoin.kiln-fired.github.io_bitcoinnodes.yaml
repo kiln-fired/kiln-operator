@@ -125,16 +125,21 @@ spec:
               rpcServer:
                 description: Configuration for the RPC Server
                 properties:
+                  apiAuthSecretName:
+                    description: Name of the secret that contains RPC API credentials
+                    type: string
+                  apiPasswordSecretKey:
+                    description: Name of the secret key that contains RPC API password
+                    type: string
+                  apiUserSecretKey:
+                    description: Name of the secret key that contains RPC API username
+                    type: string
                   certSecret:
                     description: Name of the secret that contains TLS certificates
                       for the RPC server
                     type: string
-                  password:
-                    description: Password to authenticate to the RPC server
-                    type: string
-                  user:
-                    description: Username to authenticate to the RPC server
-                    type: string
+                required:
+                - apiAuthSecretName
                 type: object
             type: object
           status:
