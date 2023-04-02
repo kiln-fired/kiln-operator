@@ -20,6 +20,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type LNDContainerImages struct {
+
+	// LND container image
+	// +kubebuilder:default:="docker.io/lightninglabs/lndinit:v0.15.5-beta"
+	LndImage string `json:"lndImage,omitempty"`
+
+	// lnd-init container image
+	// +kubebuilder:default:="docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"
+	LndInitImage string `json:"lndInitImage,omitemply"`
+}
+
 type BitcoinConnection struct {
 	// Hostname of the Bitcoin node RPC endpoint
 	Host string `json:"host,omitEmpty"`
@@ -74,6 +85,9 @@ type Wallet struct {
 type LightningNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Container image overrides
+	ContainerImages LNDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the Bitcoin RPC client
 	BitcoinConnection BitcoinConnection `json:"bitcoinConnection,omitempty"`

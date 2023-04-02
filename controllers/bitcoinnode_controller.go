@@ -213,7 +213,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Image:   "quay.io/kiln-fired/btcd:latest",
+							Image:   b.Spec.ContainerImages.BtcdImage,
 							Name:    "btcd",
 							Command: []string{"./start-btcd.sh"},
 							Ports: []corev1.ContainerPort{
@@ -315,7 +315,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 							},
 						},
 						{
-							Image:   "quay.io/kiln-fired/btcd:latest",
+							Image:   b.Spec.ContainerImages.TimerImage,
 							Name:    "timer",
 							Command: []string{"/bin/sh"},
 							Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.Mining.SecondsPerBlock)},

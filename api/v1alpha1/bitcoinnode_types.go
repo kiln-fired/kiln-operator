@@ -21,6 +21,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type BTCDContainerImages struct {
+
+	// BTCD container image
+	// +kubebuilder:default:="quay.io/kiln-fired/btcd:latest"
+	BtcdImage string `json:"btcdImage,omitempty"`
+
+	// Mining timer container image
+	// +kubebuilder:default:="quay.io/kiln-fired/btcd:latest"
+	TimerImage string `json:"btcdTimerImage,omitemply"`
+}
+
 type RPCServer struct {
 	// Name of the secret that contains TLS certificates for the RPC server
 	CertSecret string `json:"certSecret,omitempty"`
@@ -69,6 +80,9 @@ type Mining struct {
 type BitcoinNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Container image overrides
+	ContainerImages BTCDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the RPC Server
 	RPCServer RPCServer `json:"rpcServer,omitempty"`
