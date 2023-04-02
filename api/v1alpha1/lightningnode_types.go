@@ -53,9 +53,13 @@ type SeedImport struct {
 	// Name of the secret that contains the seed to import
 	SecretName string `json:"secretName,omitempty"`
 
-	// Name of the secret key that contains the seed
-	// +kubebuilder:default:="seed"
-	SecretKey string `json:"secretKey,omitempty"`
+	// Name of the secret key that contains the mnemonic seed
+	// +kubebuilder:default:="mnemonic"
+	MnemonicKey string `json:"menomicKey,omitempty"`
+
+	// Name of the secret key that contains the seed passphrase
+	// +kubebuilder:default:="passphrase"
+	PassphraseKey string `json:"passphraseKey,omitempty"`
 }
 
 type Wallet struct {

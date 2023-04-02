@@ -15,4 +15,6 @@ spec:
       secretName: alice-wallet
       secretKey: password
     seed:
-      secretName: mining-wallet
+      secretName: seed
+      mnemonicKey: mnemonic
+      passphraseKey: passphrase
