@@ -41,7 +41,7 @@ type RewardAddress struct {
 
 	// Name of the secret key that contains the reward address
 	// +optional
-	// +kubebuilder:default:="bip49Address"
+	// +kubebuilder:default:="np2wkhAddress"
 	SecretKey string `json:"secretKey,omitempty"`
 }
 

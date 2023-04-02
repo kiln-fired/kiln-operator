@@ -85,9 +85,15 @@ spec:
                   seed:
                     description: Seed to import to the wallet
                     properties:
-                      secretKey:
-                        default: seed
+                      menomicKey:
+                        default: mnemonic
+                        description: Name of the secret key that contains the mnemonic
+                          seed
+                        type: string
+                      passphraseKey:
+                        default: passphrase
                         description: Name of the secret key that contains the seed
+                          passphrase
                         type: string
                       secretName:
                         description: Name of the secret that contains the seed to

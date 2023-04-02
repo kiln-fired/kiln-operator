@@ -148,7 +148,7 @@ var _ = Describe("LightningNode controller", func() {
 			volumeExists := false
 			volumeMountExists := false
 			for _, volume := range foundStatefulSet.Spec.Template.Spec.Volumes {
-				if volume.Name == "chainkey" {
+				if volume.Name == "seed" {
 					volumeExists = true
 					Expect(volume.VolumeSource.Secret.SecretName).To(Equal(lightningNode.Spec.Wallet.Seed.SecretName))
 				}
@@ -156,9 +156,9 @@ var _ = Describe("LightningNode controller", func() {
 			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
 				if container.Name == "lnd-init" {
 					for _, volumeMount := range container.VolumeMounts {
-						if volumeMount.Name == "chainkey" {
+						if volumeMount.Name == "seed" {
 							volumeMountExists = true
-							Expect(volumeMount.MountPath).To(Equal("/secret/chainkey"))
+							Expect(volumeMount.MountPath).To(Equal("/secret/seed"))
 						}
 					}
 				}
@@ -168,14 +168,39 @@ var _ = Describe("LightningNode controller", func() {
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
 
-		By("checking if the container arguments are configured with a wallet password")
+		By("checking if the seed references are configured for lndinit")
+		Eventually(func() error {
+			Expect(foundStatefulSet.Spec.Template.Spec.InitContainers).To(Not(BeEmpty()))
+			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
+				if container.Name == "lnd-init" {
+					seedMnemonicKeyEnvExists := false
+					seedPassphraseKeyEnvExists := false
+					for _, env := range container.Env {
+						if env.Name == "SEEDMNEMONICKEY" {
+							seedMnemonicKeyEnvExists = true
+							Expect(env.Value).To(Equal(lightningNode.Spec.Wallet.Seed.MnemonicKey))
+						}
+						if env.Name == "SEEDPASSPHRASEKEY" {
+							seedPassphraseKeyEnvExists = true
+							Expect(env.Value).To(Equal(lightningNode.Spec.Wallet.Seed.PassphraseKey))
+						}
+					}
+					Expect(seedMnemonicKeyEnvExists).To(BeTrue())
+					Expect(seedPassphraseKeyEnvExists).To(BeTrue())
+					Expect(container.Args[0]).To(Equal("init-wallet"))
+					Expect(container.Args[3]).To(ContainSubstring("/secret/seed/$(SEEDMNEMONICKEY)"))
+					Expect(container.Args[4]).To(ContainSubstring("/secret/seed/$(SEEDPASSPHRASEKEY)"))
+				}
+			}
+			return nil
+		}, time.Minute, time.Second).Should(Succeed())
+
+		By("checking if the wallet password is configured")
 		Eventually(func() error {
 			Expect(foundStatefulSet.Spec.Template.Spec.InitContainers).To(Not(BeEmpty()))
 			for _, container := range foundStatefulSet.Spec.Template.Spec.InitContainers {
 				if container.Name == "lnd-init" {
 					Expect(container.Args[0]).To(Equal("init-wallet"))
-					Expect(container.Args[3]).To(ContainSubstring("/secret/chainkey/mnemonic"))
-					Expect(container.Args[4]).To(ContainSubstring("/secret/chainkey/passphrase"))
 					Expect(container.Args[5]).To(ContainSubstring("/secret/wallet-password"))
 				}
 			}

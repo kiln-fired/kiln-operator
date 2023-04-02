@@ -5,20 +5,20 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.10.0
   creationTimestamp: null
-  name: chainkeys.bitcoin.kiln-fired.github.io
+  name: seeds.bitcoin.kiln-fired.github.io
 spec:
   group: bitcoin.kiln-fired.github.io
   names:
-    kind: ChainKey
-    listKind: ChainKeyList
-    plural: chainkeys
-    singular: chainkey
+    kind: Seed
+    listKind: SeedList
+    plural: seeds
+    singular: seed
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: ChainKey is the Schema for the chainkeys API
+        description: Seed is the Schema for the seeds API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -33,10 +33,10 @@ spec:
           metadata:
             type: object
           spec:
-            description: ChainKeySpec defines the desired state of ChainKey
+            description: SeedSpec defines the desired state of Seed
             properties:
               mnemonic:
-                description: BIP39 mnemonic phrase (only 24-word format supported)
+                description: aezeed mnemonic phrase
                 type: string
               network:
                 default: simnet
@@ -44,17 +44,16 @@ spec:
                   mainnet
                 type: string
               passphrase:
-                description: User supplied passphrase for to generate HD seed
+                description: aezeed password
                 type: string
               secretName:
-                description: Name of secret to store master key, chain keypair, and
-                  chain address
+                description: Name of secret to store master key
                 type: string
             required:
             - secretName
             type: object
           status:
-            description: ChainKeyStatus defines the observed state of ChainKey
+            description: SeedStatus defines the observed state of Seed
             type: object
         type: object
     served: true

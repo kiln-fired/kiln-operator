@@ -126,11 +126,21 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 							"init-wallet",
 							"-v",
 							"--secret-source=file",
-							"--file.seed=/secret/chainkey/mnemonic",
-							"--file.seed-passphrase=/secret/chainkey/passphrase",
+							"--file.seed=/secret/seed/$(SEEDMNEMONICKEY)",
+							"--file.seed-passphrase=/secret/seed/$(SEEDPASSPHRASEKEY)",
 							"--file.wallet-password=/secret/wallet-password",
 							"--init-file.output-wallet-dir=$HOME/.lnd/data/chain/bitcoin/simnet",
 							"--init-file.validate-password",
+						},
+						Env: []corev1.EnvVar{
+							{
+								Name:  "SEEDMNEMONICKEY",
+								Value: l.Spec.Wallet.Seed.MnemonicKey,
+							},
+							{
+								Name:  "SEEDPASSPHRASEKEY",
+								Value: l.Spec.Wallet.Seed.PassphraseKey,
+							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
@@ -138,8 +148,8 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 								MountPath: ".lnd",
 							},
 							{
-								Name:      "chainkey",
-								MountPath: "/secret/chainkey",
+								Name:      "seed",
+								MountPath: "/secret/seed",
 							},
 							{
 								Name:      "wallet-password",
@@ -247,7 +257,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 							},
 						},
 						{
-							Name: "chainkey",
+							Name: "seed",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
 									SecretName: l.Spec.Wallet.Seed.SecretName,

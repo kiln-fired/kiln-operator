@@ -1,0 +1,9 @@
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: Seed
+metadata:
+  name: lnd
+spec:
+  secretName: seed
+  mnemonic: "above pioneer library glimpse exhibit analyst monitor holiday boil art ketchup mail hunt since now pattern vacant arch museum tourist brisk come pilot devote"
+  passphrase: "test"
+  network: simnet

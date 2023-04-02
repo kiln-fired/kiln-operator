@@ -46,32 +46,6 @@ rules:
 - apiGroups:
   - bitcoin.kiln-fired.github.io
   resources:
-  - chainkeys
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - bitcoin.kiln-fired.github.io
-  resources:
-  - chainkeys/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - bitcoin.kiln-fired.github.io
-  resources:
-  - chainkeys/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - bitcoin.kiln-fired.github.io
-  resources:
   - lightningnodes
   verbs:
   - create
@@ -91,6 +65,32 @@ rules:
   - bitcoin.kiln-fired.github.io
   resources:
   - lightningnodes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - bitcoin.kiln-fired.github.io
+  resources:
+  - seeds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - bitcoin.kiln-fired.github.io
+  resources:
+  - seeds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - bitcoin.kiln-fired.github.io
+  resources:
+  - seeds/status
   verbs:
   - get
   - patch

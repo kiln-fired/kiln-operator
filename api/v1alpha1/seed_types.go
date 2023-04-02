@@ -20,16 +20,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ChainKeySpec defines the desired state of ChainKey
-type ChainKeySpec struct {
-	// Name of secret to store master key, chain keypair, and chain address
+// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// SeedSpec defines the desired state of Seed
+type SeedSpec struct {
+	// Name of secret to store master key
 	SecretName string `json:"secretName"`
 
-	// BIP39 mnemonic phrase (only 24-word format supported)
+	// aezeed mnemonic phrase
 	// +optional
 	Mnemonic string `json:"mnemonic,omitempty"`
 
-	// User supplied passphrase for to generate HD seed
+	// aezeed password
 	// +optional
 	Passphrase string `json:"passphrase,omitempty"`
 
@@ -38,8 +41,8 @@ type ChainKeySpec struct {
 	Network string `json:"network,omitempty"`
 }
 
-// ChainKeyStatus defines the observed state of ChainKey
-type ChainKeyStatus struct {
+// SeedStatus defines the observed state of Seed
+type SeedStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }
@@ -47,24 +50,24 @@ type ChainKeyStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// ChainKey is the Schema for the chainkeys API
-type ChainKey struct {
+// Seed is the Schema for the seeds API
+type Seed struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ChainKeySpec   `json:"spec,omitempty"`
-	Status ChainKeyStatus `json:"status,omitempty"`
+	Spec   SeedSpec   `json:"spec,omitempty"`
+	Status SeedStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// ChainKeyList contains a list of ChainKey
-type ChainKeyList struct {
+// SeedList contains a list of Seed
+type SeedList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []ChainKey `json:"items"`
+	Items           []Seed `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&ChainKey{}, &ChainKeyList{})
+	SchemeBuilder.Register(&Seed{}, &SeedList{})
 }

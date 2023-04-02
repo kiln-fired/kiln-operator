@@ -103,11 +103,12 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "LightningNode")
 		os.Exit(1)
 	}
-	if err = (&controllers.ChainKeyReconciler{
+
+	if err = (&controllers.SeedReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ChainKey")
+		setupLog.Error(err, "unable to create controller", "controller", "Seed")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

@@ -60,7 +60,7 @@ var _ = Describe("BitcoinNode controller", func() {
 				Mining: bitcoinv1alpha1.Mining{
 					CpuMiningEnabled: false,
 					RewardAddress: bitcoinv1alpha1.RewardAddress{
-						SecretName: "test-chainkey",
+						SecretName: "seed",
 					},
 					MinBlocks:       400,
 					SecondsPerBlock: 10,

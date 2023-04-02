@@ -6,7 +6,8 @@ spec:
   mining:
     cpuMiningEnabled: false
     rewardAddress:
-      secretName: chainkey-secret
+      secretName: mining-reward-wallet
+      secretKey: np2wkhAddress
     minBlocks: 400
     secondsPerBlock: 10
   rpcServer:
