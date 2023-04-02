@@ -119,7 +119,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{{
-						Image:   "docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta",
+						Image:   l.Spec.ContainerImages.LndInitImage,
 						Name:    "lnd-init",
 						Command: []string{"lndinit"},
 						Args: []string{
@@ -159,7 +159,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 						},
 					}},
 					Containers: []corev1.Container{{
-						Image:   "quay.io/kiln-fired/lnd:latest",
+						Image:   l.Spec.ContainerImages.LndImage,
 						Name:    "lnd",
 						Command: []string{"lnd"},
 						Args: []string{

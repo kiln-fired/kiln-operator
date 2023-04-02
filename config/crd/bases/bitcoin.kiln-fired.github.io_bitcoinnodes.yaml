@@ -35,6 +35,20 @@ spec:
           spec:
             description: BitcoinNodeSpec defines the desired state of BitcoinNode
             properties:
+              image:
+                description: Container image overrides
+                properties:
+                  btcdImage:
+                    default: quay.io/kiln-fired/btcd:latest
+                    description: BTCD container image
+                    type: string
+                  btcdTimerImage:
+                    default: quay.io/kiln-fired/btcd:latest
+                    description: Mining timer container image
+                    type: string
+                required:
+                - btcdTimerImage
+                type: object
               mining:
                 description: Mining configuration
                 properties:

@@ -67,6 +67,20 @@ spec:
                 - host
                 - network
                 type: object
+              image:
+                description: Container image overrides
+                properties:
+                  lndImage:
+                    default: docker.io/lightninglabs/lndinit:v0.15.5-beta
+                    description: LND container image
+                    type: string
+                  lndInitImage:
+                    default: docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta
+                    description: lnd-init container image
+                    type: string
+                required:
+                - lndInitImage
+                type: object
               wallet:
                 description: Configuration for the wallet
                 properties:
