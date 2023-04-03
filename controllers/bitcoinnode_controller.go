@@ -118,7 +118,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	rpcUser := string(foundCredSecret.Data[bitcoinNode.Spec.RPCServer.ApiUserSecretKey])
-	rpcPass := string(foundCertSecret.Data[bitcoinNode.Spec.RPCServer.ApiPasswordSecretKey])
+	rpcPass := string(foundCredSecret.Data[bitcoinNode.Spec.RPCServer.ApiPasswordSecretKey])
 
 	connCfg := &rpcclient.ConnConfig{
 		Host:         bitcoinNode.Name + "." + bitcoinNode.Namespace + "." + "svc.cluster.local:18556",
