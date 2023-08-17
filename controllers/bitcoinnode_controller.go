@@ -132,7 +132,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	blockCount, err := btcdClient.GetBlockCount()
 
 	if err != nil {
-		log.Info("Failed to get the block count")
+		log.Error(err, "Failed to get the block count")
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
