@@ -62,8 +62,9 @@ var _ = Describe("BitcoinNode controller", func() {
 					RewardAddress: bitcoinv1alpha1.RewardAddress{
 						SecretName: "seed",
 					},
-					MinBlocks:       400,
-					SecondsPerBlock: 10,
+					MinBlocks:             400,
+					PeriodicBlocksEnabled: true,
+					SecondsPerBlock:       10,
 				},
 				RPCServer: bitcoinv1alpha1.RPCServer{
 					CertSecret:           "btcd-rpc-tls",
@@ -149,6 +150,12 @@ var _ = Describe("BitcoinNode controller", func() {
 			}
 			Expect(rpcUserEnvExists).To(BeTrue())
 			Expect(rpcPassEnvExists).To(BeTrue())
+			return nil
+		}, time.Minute, time.Second).Should(Succeed())
+
+		By("checking for the existence of a timer container")
+		Eventually(func() error {
+			Expect(len(foundStatefulSet.Spec.Template.Spec.Containers)).To(Equal(2))
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
 	})
