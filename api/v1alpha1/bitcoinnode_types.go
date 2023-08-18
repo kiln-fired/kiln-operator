@@ -70,9 +70,14 @@ type Mining struct {
 	// +kubebuilder:default:=0
 	MinBlocks int64 `json:"minBlocks,omitempty"`
 
+	// Mine new blocks periodically
+	// +optional
+	// +kubebuilder:default:=false
+	PeriodicBlocksEnabled bool `json:"periodicBlocksEnabled,omitempty"`
+
 	// Number of seconds to wait between scheduled block generation
 	// +optional
-	// +kubebuilder:default:=0
+	// +kubebuilder:default:=30
 	SecondsPerBlock int64 `json:"secondsPerBlock,omitempty"`
 }
 

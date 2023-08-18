@@ -9,6 +9,7 @@ spec:
       secretName: mining-reward-wallet
       secretKey: np2wkhAddress
     minBlocks: 400
+    periodicBlocksEnabled: true
     secondsPerBlock: 10
   rpcServer:
     certSecret: btcd-rpc-tls

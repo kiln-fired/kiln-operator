@@ -195,6 +195,173 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	ls := labelsForBitcoinNode(b.Name)
 	size := int32(1)
 
+	btcd := corev1.Container{
+		Image:   b.Spec.ContainerImages.BtcdImage,
+		Name:    "btcd",
+		Command: []string{"./start-btcd.sh"},
+		Ports: []corev1.ContainerPort{
+			{
+				ContainerPort: 18555,
+				Name:          "server",
+			},
+			{
+				ContainerPort: 18556,
+				Name:          "rpc",
+			},
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name: "RPCUSER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: b.Spec.RPCServer.ApiAuthSecretName,
+						},
+						Key: b.Spec.RPCServer.ApiUserSecretKey,
+					},
+				},
+			},
+			{
+				Name: "RPCPASS",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: b.Spec.RPCServer.ApiAuthSecretName,
+						},
+						Key: b.Spec.RPCServer.ApiPasswordSecretKey,
+					},
+				},
+			},
+			{
+				Name: "MINING_ADDRESS",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: b.Spec.Mining.RewardAddress.SecretName,
+						},
+						Key: b.Spec.Mining.RewardAddress.SecretKey,
+					},
+				},
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			Privileged:               pointer.Bool(false),
+			RunAsNonRoot:             pointer.Bool(true),
+			AllowPrivilegeEscalation: pointer.Bool(false),
+			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+		},
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/bash",
+						"-c",
+						"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
+					},
+				},
+			},
+			InitialDelaySeconds: 5,
+		},
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/bash",
+						"-c",
+						"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
+					},
+				},
+			},
+			InitialDelaySeconds: 5,
+		},
+		Resources: b.Spec.Resources,
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "btcd-home",
+				MountPath: ".btcd",
+			},
+			{
+				Name:      "btcd-data",
+				MountPath: "data",
+			},
+			{
+				Name:      "rpc-cert",
+				MountPath: "/rpc/rpc.cert",
+				SubPath:   "tls.crt",
+			},
+			{
+				Name:      "rpc-cert",
+				MountPath: "/rpc/rpc.key",
+				SubPath:   "tls.key",
+			},
+		},
+	}
+
+	timer := corev1.Container{
+		Image:   b.Spec.ContainerImages.TimerImage,
+		Name:    "timer",
+		Command: []string{"/bin/sh"},
+		Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.Mining.SecondsPerBlock)},
+		Env: []corev1.EnvVar{
+			{
+				Name: "RPCUSER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: b.Spec.RPCServer.ApiAuthSecretName,
+						},
+						Key: b.Spec.RPCServer.ApiUserSecretKey,
+					},
+				},
+			},
+			{
+				Name: "RPCPASS",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: b.Spec.RPCServer.ApiAuthSecretName,
+						},
+						Key: b.Spec.RPCServer.ApiPasswordSecretKey,
+					},
+				},
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			Privileged:               pointer.Bool(false),
+			RunAsNonRoot:             pointer.Bool(true),
+			AllowPrivilegeEscalation: pointer.Bool(false),
+			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "btcd-home",
+				MountPath: ".btcd",
+			},
+			{
+				Name:      "btcd-data",
+				MountPath: "data",
+			},
+			{
+				Name:      "rpc-cert",
+				MountPath: "/rpc/rpc.cert",
+				SubPath:   "tls.crt",
+			},
+			{
+				Name:      "rpc-cert",
+				MountPath: "/rpc/rpc.key",
+				SubPath:   "tls.key",
+			},
+		},
+	}
+
+	containers := []corev1.Container{btcd}
+
+	if b.Spec.Mining.PeriodicBlocksEnabled == true {
+		containers = append(containers, timer)
+	}
+
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      b.Name,
@@ -211,167 +378,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Image:   b.Spec.ContainerImages.BtcdImage,
-							Name:    "btcd",
-							Command: []string{"./start-btcd.sh"},
-							Ports: []corev1.ContainerPort{
-								{
-									ContainerPort: 18555,
-									Name:          "server",
-								},
-								{
-									ContainerPort: 18556,
-									Name:          "rpc",
-								},
-							},
-							Env: []corev1.EnvVar{
-								{
-									Name: "RPCUSER",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: b.Spec.RPCServer.ApiAuthSecretName,
-											},
-											Key: b.Spec.RPCServer.ApiUserSecretKey,
-										},
-									},
-								},
-								{
-									Name: "RPCPASS",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: b.Spec.RPCServer.ApiAuthSecretName,
-											},
-											Key: b.Spec.RPCServer.ApiPasswordSecretKey,
-										},
-									},
-								},
-								{
-									Name: "MINING_ADDRESS",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: b.Spec.Mining.RewardAddress.SecretName,
-											},
-											Key: b.Spec.Mining.RewardAddress.SecretKey,
-										},
-									},
-								},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-								Privileged:               pointer.Bool(false),
-								RunAsNonRoot:             pointer.Bool(true),
-								AllowPrivilegeEscalation: pointer.Bool(false),
-								SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
-							},
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									Exec: &corev1.ExecAction{
-										Command: []string{
-											"/bin/bash",
-											"-c",
-											"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
-										},
-									},
-								},
-								InitialDelaySeconds: 5,
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									Exec: &corev1.ExecAction{
-										Command: []string{
-											"/bin/bash",
-											"-c",
-											"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
-										},
-									},
-								},
-								InitialDelaySeconds: 5,
-							},
-							Resources: b.Spec.Resources,
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "btcd-home",
-									MountPath: ".btcd",
-								},
-								{
-									Name:      "btcd-data",
-									MountPath: "data",
-								},
-								{
-									Name:      "rpc-cert",
-									MountPath: "/rpc/rpc.cert",
-									SubPath:   "tls.crt",
-								},
-								{
-									Name:      "rpc-cert",
-									MountPath: "/rpc/rpc.key",
-									SubPath:   "tls.key",
-								},
-							},
-						},
-						{
-							Image:   b.Spec.ContainerImages.TimerImage,
-							Name:    "timer",
-							Command: []string{"/bin/sh"},
-							Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.Mining.SecondsPerBlock)},
-							Env: []corev1.EnvVar{
-								{
-									Name: "RPCUSER",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: b.Spec.RPCServer.ApiAuthSecretName,
-											},
-											Key: b.Spec.RPCServer.ApiUserSecretKey,
-										},
-									},
-								},
-								{
-									Name: "RPCPASS",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: b.Spec.RPCServer.ApiAuthSecretName,
-											},
-											Key: b.Spec.RPCServer.ApiPasswordSecretKey,
-										},
-									},
-								},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-								Privileged:               pointer.Bool(false),
-								RunAsNonRoot:             pointer.Bool(true),
-								AllowPrivilegeEscalation: pointer.Bool(false),
-								SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "btcd-home",
-									MountPath: ".btcd",
-								},
-								{
-									Name:      "btcd-data",
-									MountPath: "data",
-								},
-								{
-									Name:      "rpc-cert",
-									MountPath: "/rpc/rpc.cert",
-									SubPath:   "tls.crt",
-								},
-								{
-									Name:      "rpc-cert",
-									MountPath: "/rpc/rpc.key",
-									SubPath:   "tls.key",
-								},
-							},
-						},
-					},
+					Containers: containers,
 					Volumes: []corev1.Volume{
 						{
 							Name: "btcd-home",

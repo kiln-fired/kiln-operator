@@ -61,6 +61,10 @@ spec:
                     description: Minimum number of blocks to mine on initial startup
                     format: int64
                     type: integer
+                  periodicBlocksEnabled:
+                    default: false
+                    description: Mine new blocks periodically
+                    type: boolean
                   rewardAddress:
                     description: Address the should receive block rewards
                     properties:
@@ -74,7 +78,7 @@ spec:
                         type: string
                     type: object
                   secondsPerBlock:
-                    default: 0
+                    default: 30
                     description: Number of seconds to wait between scheduled block
                       generation
                     format: int64
