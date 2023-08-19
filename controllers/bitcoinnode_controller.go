@@ -195,6 +195,46 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	ls := labelsForBitcoinNode(b.Name)
 	size := int32(1)
 
+	environment := []corev1.EnvVar{
+		{
+			Name: "RPCUSER",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: b.Spec.RPCServer.ApiAuthSecretName,
+					},
+					Key: b.Spec.RPCServer.ApiUserSecretKey,
+				},
+			},
+		},
+		{
+			Name: "RPCPASS",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: b.Spec.RPCServer.ApiAuthSecretName,
+					},
+					Key: b.Spec.RPCServer.ApiPasswordSecretKey,
+				},
+			},
+		},
+	}
+
+	if b.Spec.Mining.RewardAddress.SecretName != "" {
+		rewardAddress := corev1.EnvVar{
+			Name: "MINING_ADDRESS",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: b.Spec.Mining.RewardAddress.SecretName,
+					},
+					Key: b.Spec.Mining.RewardAddress.SecretKey,
+				},
+			},
+		}
+		environment = append(environment, rewardAddress)
+	}
+
 	btcd := corev1.Container{
 		Image:   b.Spec.ContainerImages.BtcdImage,
 		Name:    "btcd",
@@ -209,41 +249,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 				Name:          "rpc",
 			},
 		},
-		Env: []corev1.EnvVar{
-			{
-				Name: "RPCUSER",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: b.Spec.RPCServer.ApiAuthSecretName,
-						},
-						Key: b.Spec.RPCServer.ApiUserSecretKey,
-					},
-				},
-			},
-			{
-				Name: "RPCPASS",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: b.Spec.RPCServer.ApiAuthSecretName,
-						},
-						Key: b.Spec.RPCServer.ApiPasswordSecretKey,
-					},
-				},
-			},
-			{
-				Name: "MINING_ADDRESS",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: b.Spec.Mining.RewardAddress.SecretName,
-						},
-						Key: b.Spec.Mining.RewardAddress.SecretKey,
-					},
-				},
-			},
-		},
+		Env: environment,
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 			Privileged:               pointer.Bool(false),
@@ -303,30 +309,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		Name:    "timer",
 		Command: []string{"/bin/sh"},
 		Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.Mining.SecondsPerBlock)},
-		Env: []corev1.EnvVar{
-			{
-				Name: "RPCUSER",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: b.Spec.RPCServer.ApiAuthSecretName,
-						},
-						Key: b.Spec.RPCServer.ApiUserSecretKey,
-					},
-				},
-			},
-			{
-				Name: "RPCPASS",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: b.Spec.RPCServer.ApiAuthSecretName,
-						},
-						Key: b.Spec.RPCServer.ApiPasswordSecretKey,
-					},
-				},
-			},
-		},
+		Env:     environment,
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 			Privileged:               pointer.Bool(false),
