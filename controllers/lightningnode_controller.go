@@ -104,11 +104,11 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 
 	lndImage := l.Spec.ContainerImages.LndImage
 	if lndImage == "" {
-		lndImage = "docker.io/lightninglabs/lndinit:v0.15.5-beta"
+		lndImage = "docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"
 	}
 	lndInitImage := l.Spec.ContainerImages.LndInitImage
 	if lndInitImage == "" {
-		lndInitImage = "docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"
+		lndInitImage = "docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"
 	}
 	mnemonicKey := l.Spec.Wallet.Seed.MnemonicKey
 	if mnemonicKey == "" {
