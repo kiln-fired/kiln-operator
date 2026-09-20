@@ -103,6 +103,12 @@ var _ = Describe("LightningNode controller", func() {
 			return k8sClient.Get(ctx, statefulSetNamespaceName, foundStatefulSet)
 		}, time.Minute, time.Second).Should(Succeed())
 
+		By("checking if the expected Lightning images are used")
+		Expect(foundStatefulSet.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		Expect(foundStatefulSet.Spec.Template.Spec.InitContainers[0].Image).To(Equal("docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"))
+		Expect(foundStatefulSet.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(foundStatefulSet.Spec.Template.Spec.Containers[0].Image).To(Equal("docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"))
+
 		By("checking if the wallet password is referenced and mounted")
 		Eventually(func() error {
 			volumeExists := false

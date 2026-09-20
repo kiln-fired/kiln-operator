@@ -4,60 +4,108 @@
 ![go report card](https://goreportcard.com/badge/github.com/kiln-fired/kiln-operator)
 ![go version](https://img.shields.io/github/go-mod/go-version/kiln-fired/kiln-operator)
 
-A Kubernetes operator for managing the state of Bitcoin and Lightning nodes.
+Kiln is a Kubernetes operator for managing Bitcoin and Lightning node resources.
 
-## System Requirements
+The project currently provides three namespaced APIs:
 
-1. A Kubernetes client and compatible cluster
-2. Go  `v1.19`
-3. Docker `v17.03+`
+- `BitcoinNode` for btcd-backed Bitcoin nodes
+- `LightningNode` for LND nodes
+- `Seed` for LND-compatible seed material
+
+The current Lightning runtime baseline is LND 0.21 with `lndinit` for wallet initialization.
+
+## Requirements
+
+For local development:
+
+- Go 1.26
+- Docker with BuildKit support
+- access to a Kubernetes cluster for running the operator
+- `kubectl` or `oc` configured for that cluster
+
+Build and test tooling such as `controller-gen`, Kustomize, and `setup-envtest` is installed into `./bin` by the Makefile as needed.
 
 ## Development
 
-This operator follows the conventions described in the [Operator SDK Go Tutorial](https://sdk.operatorframework.io/docs/building-operators/golang/tutorial/).
+Run the controller test suite:
 
-When modifying resource type definitions, run the following command to generate code for the modified resource:
+```shell
+make test
+```
+
+Build the manager binary:
+
+```shell
+make build
+```
+
+When modifying API types, regenerate code and CRD manifests:
 
 ```shell
 make generate
-````
-
-To generate CRD manifests, run:
-
-```shell
 make manifests
-````
-
-## Running the operator locally
-
-Authenticate to a Kubernetes cluster as an administrator and run:
-
-```shell
-make install run
-````
-
-See [sample CRs](config/samples) for reference configurations.
-
-## Building/Pushing the operator image
-
-```shell
-export repo=kiln-fired #replace with yours
-docker login quay.io/$repo
-make docker-build IMG=quay.io/$repo/kiln-operator:latest
-make docker-push IMG=quay.io/$repo/kiln-operator:latest
 ```
 
-## Deploy to OLM via bundle
+The tests use controller-runtime `envtest`, so they do not require an existing Kubernetes cluster.
+
+## Running locally
+
+Install the CRDs into the cluster referenced by your current kubeconfig and run the controller from your workstation:
 
 ```shell
-make manifests
-make bundle IMG=quay.io/$repo/kiln-operator:latest
-operator-sdk bundle validate ./bundle --select-optional name=operatorhub
-make bundle-build BUNDLE_IMG=quay.io/$repo/kiln-operator-bundle:latest
-docker push quay.io/$repo/kiln-operator-bundle:latest
-operator-sdk bundle validate quay.io/$repo/kiln-operator-bundle:latest --select-optional name=operatorhub
-oc new-project kiln-operator
-oc label namespace kiln-operator openshift.io/cluster-monitoring="true"
-operator-sdk cleanup kiln-operator -n kiln-operator
-operator-sdk run bundle --install-mode AllNamespaces -n kiln-operator quay.io/$repo/kiln-operator-bundle:latest
+make install
+make run
 ```
+
+Sample custom resources are available under [`config/samples`](config/samples).
+
+## Building the operator image
+
+Set the target image and build it:
+
+```shell
+export IMG=quay.io/kiln-fired/kiln-operator:latest
+make docker-build IMG="$IMG"
+```
+
+Push it to the registry:
+
+```shell
+docker login quay.io
+make docker-push IMG="$IMG"
+```
+
+To deploy that image to the current cluster:
+
+```shell
+make deploy IMG="$IMG"
+```
+
+## OLM bundle
+
+Generate and validate an Operator Lifecycle Manager bundle:
+
+```shell
+export IMG=quay.io/kiln-fired/kiln-operator:latest
+export BUNDLE_IMG=quay.io/kiln-fired/kiln-operator-bundle:latest
+
+make bundle IMG="$IMG" VERSION=0.0.1 DEFAULT_CHANNEL=alpha
+make bundle-build BUNDLE_IMG="$BUNDLE_IMG"
+```
+
+Push and validate the bundle image:
+
+```shell
+make bundle-push BUNDLE_IMG="$BUNDLE_IMG"
+operator-sdk bundle validate "$BUNDLE_IMG"
+```
+
+For local bundle installation:
+
+```shell
+operator-sdk run bundle "$BUNDLE_IMG"
+```
+
+## Project status
+
+Kiln is being modernized from its original 2022-2023 implementation. The current work is preserving existing behavior while updating the operator framework and Bitcoin/Lightning dependency stack. Larger changes to storage, recovery, key custody, and Bitcoin backend architecture are intentionally being handled separately.

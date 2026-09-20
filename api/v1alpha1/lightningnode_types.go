@@ -23,11 +23,11 @@ import (
 type LNDContainerImages struct {
 
 	// LND container image
-	// +kubebuilder:default="docker.io/lightninglabs/lndinit:v0.15.5-beta"
+	// +kubebuilder:default="docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"
 	LndImage string `json:"lndImage,omitempty"`
 
 	// lnd-init container image
-	// +kubebuilder:default="docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"
+	// +kubebuilder:default="docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"
 	LndInitImage string `json:"lndInitImage,omitemply"`
 }
 
@@ -87,7 +87,7 @@ type LightningNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Container image overrides
-	// +kubebuilder:default={lndImage: "docker.io/lightninglabs/lndinit:v0.15.5-beta", lndInitImage: "docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"}
+	// +kubebuilder:default={lndImage: "docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta", lndInitImage: "docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"}
 	ContainerImages LNDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the Bitcoin RPC client
