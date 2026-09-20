@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -242,9 +242,9 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 						},
 						SecurityContext: &corev1.SecurityContext{
 							Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-							Privileged:               pointer.Bool(false),
-							RunAsNonRoot:             pointer.Bool(true),
-							AllowPrivilegeEscalation: pointer.Bool(false),
+							Privileged:               ptr.To(false),
+							RunAsNonRoot:             ptr.To(true),
+							AllowPrivilegeEscalation: ptr.To(false),
 							SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 						},
 						VolumeMounts: []corev1.VolumeMount{
