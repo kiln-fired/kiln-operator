@@ -87,7 +87,7 @@ type BitcoinNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Container image overrides
-	// +kubebuilder:default={}
+	// +kubebuilder:default={btcdImage: "quay.io/kiln-fired/btcd:latest", btcdTimerImage: "quay.io/kiln-fired/btcd:latest"}
 	ContainerImages BTCDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the RPC Server
