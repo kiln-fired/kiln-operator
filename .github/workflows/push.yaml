@@ -14,12 +14,13 @@ jobs:
     steps:
 
       - name: install go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.0'
+          cache: true
 
       - name: check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: normalize go modules
         run: go mod tidy
@@ -43,14 +44,14 @@ jobs:
         run:  make test
 
       - name: authenticate to container image registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v4
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: publish operator image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/Dockerfile
@@ -63,7 +64,7 @@ jobs:
         run: make bundle IMG=quay.io/kiln-fired/kiln-operator:latest VERSION=0.0.1 DEFAULT_CHANNEL=alpha
 
       - name: publish bundle image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/bundle.Dockerfile
