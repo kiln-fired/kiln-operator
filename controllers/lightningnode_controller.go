@@ -102,6 +102,23 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 	ls := labelsForLightningNode(l.Name)
 	size := int32(1)
 
+	lndImage := l.Spec.ContainerImages.LndImage
+	if lndImage == "" {
+		lndImage = "docker.io/lightninglabs/lndinit:v0.15.5-beta"
+	}
+	lndInitImage := l.Spec.ContainerImages.LndInitImage
+	if lndInitImage == "" {
+		lndInitImage = "docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"
+	}
+	mnemonicKey := l.Spec.Wallet.Seed.MnemonicKey
+	if mnemonicKey == "" {
+		mnemonicKey = "mnemonic"
+	}
+	passphraseKey := l.Spec.Wallet.Seed.PassphraseKey
+	if passphraseKey == "" {
+		passphraseKey = "passphrase"
+	}
+
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      l.Name,
@@ -119,7 +136,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 				},
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{{
-						Image:   l.Spec.ContainerImages.LndInitImage,
+						Image:   lndInitImage,
 						Name:    "lnd-init",
 						Command: []string{"lndinit"},
 						Args: []string{
@@ -135,11 +152,11 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 						Env: []corev1.EnvVar{
 							{
 								Name:  "SEEDMNEMONICKEY",
-								Value: l.Spec.Wallet.Seed.MnemonicKey,
+								Value: mnemonicKey,
 							},
 							{
 								Name:  "SEEDPASSPHRASEKEY",
-								Value: l.Spec.Wallet.Seed.PassphraseKey,
+								Value: passphraseKey,
 							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
@@ -159,7 +176,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 						},
 					}},
 					Containers: []corev1.Container{{
-						Image:   l.Spec.ContainerImages.LndImage,
+						Image:   lndImage,
 						Name:    "lnd",
 						Command: []string{"lnd"},
 						Args: []string{
