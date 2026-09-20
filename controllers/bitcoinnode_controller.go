@@ -296,13 +296,9 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"btcctl",
-						"--simnet",
-						"--rpcserver=127.0.0.1:18556",
-						"--rpcuser=$(RPCUSER)",
-						"--rpcpass=$(RPCPASS)",
-						"--rpccert=/rpc/rpc.cert",
-						"getblockcount",
+						"/bin/sh",
+						"-c",
+						"btcctl --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
 					},
 				},
 			},
@@ -312,13 +308,9 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"btcctl",
-						"--simnet",
-						"--rpcserver=127.0.0.1:18556",
-						"--rpcuser=$(RPCUSER)",
-						"--rpcpass=$(RPCPASS)",
-						"--rpccert=/rpc/rpc.cert",
-						"getblockcount",
+						"/bin/sh",
+						"-c",
+						"btcctl --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
 					},
 				},
 			},
@@ -332,7 +324,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			},
 			{
 				Name:      "btcd-data",
-				MountPath: "data",
+				MountPath: "/data",
 			},
 			{
 				Name:      "rpc-cert",
@@ -372,7 +364,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			},
 			{
 				Name:      "btcd-data",
-				MountPath: "data",
+				MountPath: "/data",
 			},
 			{
 				Name:      "rpc-cert",
