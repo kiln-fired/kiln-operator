@@ -2,8 +2,9 @@ name: pull request
 
 on:
   pull_request:
-    branches:
-      - main
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -12,12 +13,13 @@ jobs:
     steps:
 
       - name: install go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: '1.26.0'
+          cache: true
 
       - name: check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: normalize go modules
         run: go mod tidy
@@ -41,7 +43,7 @@ jobs:
         run:  make test
 
       - name: build operator image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/Dockerfile
@@ -54,7 +56,7 @@ jobs:
         run: make bundle IMG=quay.io/kiln-fired/kiln-operator:latest VERSION=0.0.1 DEFAULT_CHANNEL=alpha
 
       - name: build bundle image
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./${{ env.PROJECT_DIR }}/bundle.Dockerfile
