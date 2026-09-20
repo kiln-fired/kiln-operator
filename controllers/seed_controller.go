@@ -83,8 +83,12 @@ func (r *SeedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	var networkParams *chaincfg.Params
+	network := seed.Spec.Network
+	if network == "" {
+		network = "simnet"
+	}
 
-	switch seed.Spec.Network {
+	switch network {
 	case "simnet":
 		networkParams = &chaincfg.SimNetParams
 	case "mainnet":
