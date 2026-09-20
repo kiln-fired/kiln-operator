@@ -87,7 +87,7 @@ type LightningNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Container image overrides
-	// +kubebuilder:default={}
+	// +kubebuilder:default={lndImage: "docker.io/lightninglabs/lndinit:v0.15.5-beta", lndInitImage: "docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"}
 	ContainerImages LNDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the Bitcoin RPC client
