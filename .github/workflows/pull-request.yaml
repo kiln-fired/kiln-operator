@@ -12,14 +12,14 @@ jobs:
     name: build
     steps:
 
+      - name: check out code
+        uses: actions/checkout@v7
+
       - name: install go
         uses: actions/setup-go@v7
         with:
           go-version: '1.26.0'
           cache: true
-
-      - name: check out code
-        uses: actions/checkout@v7
 
       - name: normalize go modules
         run: go mod tidy
@@ -34,16 +34,13 @@ jobs:
           echo bin >> $GITHUB_PATH
           chmod +x bin/*
 
-      - name: build code
-        shell: bash
-        run:  make build
-
       - name: run controller tests
         shell: bash
-        run:  make test
+        run: make test
 
-      - name: set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - name: build code
+        shell: bash
+        run: make build
 
       - name: build operator image
         uses: docker/build-push-action@v7
@@ -51,8 +48,6 @@ jobs:
           context: .
           file: ./${{ env.PROJECT_DIR }}/Dockerfile
           push: false
-          cache-from: type=gha,scope=manager
-          cache-to: type=gha,mode=max,scope=manager
           tags: |
             quay.io/kiln-fired/kiln-operator:latest
 
@@ -66,7 +61,5 @@ jobs:
           context: .
           file: ./${{ env.PROJECT_DIR }}/bundle.Dockerfile
           push: false
-          cache-from: type=gha,scope=bundle
-          cache-to: type=gha,mode=max,scope=bundle
           tags: |
             quay.io/kiln-fired/kiln-operator-bundle:latest
