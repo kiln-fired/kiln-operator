@@ -87,6 +87,7 @@ type BitcoinNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Container image overrides
+	// +kubebuilder:default={}
 	ContainerImages BTCDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the RPC Server
