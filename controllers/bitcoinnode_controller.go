@@ -195,6 +195,19 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	ls := labelsForBitcoinNode(b.Name)
 	size := int32(1)
 
+	btcdImage := b.Spec.ContainerImages.BtcdImage
+	if btcdImage == "" {
+		btcdImage = "quay.io/kiln-fired/btcd:latest"
+	}
+	timerImage := b.Spec.ContainerImages.TimerImage
+	if timerImage == "" {
+		timerImage = "quay.io/kiln-fired/btcd:latest"
+	}
+	rewardAddressKey := b.Spec.Mining.RewardAddress.SecretKey
+	if rewardAddressKey == "" {
+		rewardAddressKey = "np2wkhAddress"
+	}
+
 	environment := []corev1.EnvVar{
 		{
 			Name: "RPCUSER",
@@ -228,7 +241,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: b.Spec.Mining.RewardAddress.SecretName,
 					},
-					Key: b.Spec.Mining.RewardAddress.SecretKey,
+					Key: rewardAddressKey,
 				},
 			},
 		}
@@ -236,7 +249,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	}
 
 	btcd := corev1.Container{
-		Image:   b.Spec.ContainerImages.BtcdImage,
+		Image:   btcdImage,
 		Name:    "btcd",
 		Command: []string{"./start-btcd.sh"},
 		Ports: []corev1.ContainerPort{
@@ -305,7 +318,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	}
 
 	timer := corev1.Container{
-		Image:   b.Spec.ContainerImages.TimerImage,
+		Image:   timerImage,
 		Name:    "timer",
 		Command: []string{"/bin/sh"},
 		Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.Mining.SecondsPerBlock)},
@@ -387,7 +400,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
 					AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
-					Resources: corev1.ResourceRequirements{
+					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceStorage: resource.MustParse("2Gi"),
 						},

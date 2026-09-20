@@ -24,11 +24,11 @@ import (
 type BTCDContainerImages struct {
 
 	// BTCD container image
-	// +kubebuilder:default:="quay.io/kiln-fired/btcd:latest"
+	// +kubebuilder:default="quay.io/kiln-fired/btcd:latest"
 	BtcdImage string `json:"btcdImage,omitempty"`
 
 	// Mining timer container image
-	// +kubebuilder:default:="quay.io/kiln-fired/btcd:latest"
+	// +kubebuilder:default="quay.io/kiln-fired/btcd:latest"
 	TimerImage string `json:"btcdTimerImage,omitemply"`
 }
 
@@ -52,13 +52,13 @@ type RewardAddress struct {
 
 	// Name of the secret key that contains the reward address
 	// +optional
-	// +kubebuilder:default:="np2wkhAddress"
+	// +kubebuilder:default="np2wkhAddress"
 	SecretKey string `json:"secretKey,omitempty"`
 }
 
 type Mining struct {
 	// CPU Mining Enabled
-	// +kubebuilder:default:=false
+	// +kubebuilder:default=false
 	CpuMiningEnabled bool `json:"cpuMiningEnabled,omitempty"`
 
 	// Address the should receive block rewards
@@ -67,17 +67,17 @@ type Mining struct {
 
 	// Minimum number of blocks to mine on initial startup
 	// +optional
-	// +kubebuilder:default:=0
+	// +kubebuilder:default=0
 	MinBlocks int64 `json:"minBlocks,omitempty"`
 
 	// Mine new blocks periodically
 	// +optional
-	// +kubebuilder:default:=false
+	// +kubebuilder:default=false
 	PeriodicBlocksEnabled bool `json:"periodicBlocksEnabled,omitempty"`
 
 	// Number of seconds to wait between scheduled block generation
 	// +optional
-	// +kubebuilder:default:=30
+	// +kubebuilder:default=30
 	SecondsPerBlock int64 `json:"secondsPerBlock,omitempty"`
 }
 
@@ -87,6 +87,7 @@ type BitcoinNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Container image overrides
+	// +kubebuilder:default={btcdImage: "quay.io/kiln-fired/btcd:latest", btcdTimerImage: "quay.io/kiln-fired/btcd:latest"}
 	ContainerImages BTCDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the RPC Server
@@ -102,7 +103,7 @@ type BitcoinNodeSpec struct {
 
 	// The compute resource requirements
 	// +optional
-	// +kubebuilder:default:={limits: {cpu: "100m", memory: "1Gi"}, requests: {cpu: "50m", memory: "200Mi"}}
+	// +kubebuilder:default={limits: {cpu: "100m", memory: "1Gi"}, requests: {cpu: "50m", memory: "200Mi"}}
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 

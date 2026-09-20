@@ -1,18 +1,18 @@
 module github.com/kiln-fired/kiln-operator
 
-go 1.19
+go 1.26.0
 
 require (
 	github.com/btcsuite/btcd v0.23.4
 	github.com/btcsuite/btcd/btcutil v1.1.3
 	github.com/lightningnetwork/lnd v0.15.5-beta
-	github.com/onsi/ginkgo/v2 v2.8.1
-	github.com/onsi/gomega v1.27.1
-	k8s.io/api v0.26.1
-	k8s.io/apimachinery v0.26.1
-	k8s.io/client-go v0.25.0
-	k8s.io/utils v0.0.0-20221107191617-1a15be271d1d
-	sigs.k8s.io/controller-runtime v0.13.0
+	github.com/onsi/ginkgo/v2 v2.27.4
+	github.com/onsi/gomega v1.39.0
+	k8s.io/api v0.37.0
+	k8s.io/apimachinery v0.37.0
+	k8s.io/client-go v0.37.0
+	k8s.io/utils v0.0.0-20260626114624-be93311217bd
+	sigs.k8s.io/controller-runtime v0.25.0
 )
 
 require (

@@ -23,11 +23,11 @@ import (
 type LNDContainerImages struct {
 
 	// LND container image
-	// +kubebuilder:default:="docker.io/lightninglabs/lndinit:v0.15.5-beta"
+	// +kubebuilder:default="docker.io/lightninglabs/lndinit:v0.15.5-beta"
 	LndImage string `json:"lndImage,omitempty"`
 
 	// lnd-init container image
-	// +kubebuilder:default:="docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"
+	// +kubebuilder:default="docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"
 	LndInitImage string `json:"lndInitImage,omitemply"`
 }
 
@@ -36,7 +36,7 @@ type BitcoinConnection struct {
 	Host string `json:"host,omitEmpty"`
 
 	// Bitcoin network, e.g. simnet, testnet, regressionnet, mainnet
-	// +kubebuilder:default:="simnet"
+	// +kubebuilder:default="simnet"
 	Network string `json:"network,omitEmpty"`
 
 	// Name of the secret that contains TLS certificates for the RPC server
@@ -65,11 +65,11 @@ type SeedImport struct {
 	SecretName string `json:"secretName,omitempty"`
 
 	// Name of the secret key that contains the mnemonic seed
-	// +kubebuilder:default:="mnemonic"
+	// +kubebuilder:default="mnemonic"
 	MnemonicKey string `json:"menomicKey,omitempty"`
 
 	// Name of the secret key that contains the seed passphrase
-	// +kubebuilder:default:="passphrase"
+	// +kubebuilder:default="passphrase"
 	PassphraseKey string `json:"passphraseKey,omitempty"`
 }
 
@@ -87,6 +87,7 @@ type LightningNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Container image overrides
+	// +kubebuilder:default={lndImage: "docker.io/lightninglabs/lndinit:v0.15.5-beta", lndInitImage: "docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta"}
 	ContainerImages LNDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the Bitcoin RPC client

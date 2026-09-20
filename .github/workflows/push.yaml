@@ -14,18 +14,21 @@ jobs:
     steps:
 
       - name: install go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
-          go-version: ^1.19
+          go-version: '1.26.0'
 
       - name: check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+
+      - name: normalize go modules
+        run: go mod tidy
 
       - name: prepare build environment
         run: |
           # Create Binary Directory
           mkdir -p bin
-          curl -L -o bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v1.27.0/operator-sdk_linux_amd64
+          curl -L -o bin/operator-sdk https://github.com/operator-framework/operator-sdk/releases/download/v1.42.3/operator-sdk_linux_amd64
           make controller-gen
           make kustomize
           echo bin >> $GITHUB_PATH
