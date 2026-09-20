@@ -37,7 +37,7 @@ type SeedSpec struct {
 	Passphrase string `json:"passphrase,omitempty"`
 
 	// Bitcoin network, e.g. simnet, testnet, regressionnet, mainnet
-	// +kubebuilder:default:="simnet"
+	// +kubebuilder:default="simnet"
 	Network string `json:"network,omitempty"`
 }
 
