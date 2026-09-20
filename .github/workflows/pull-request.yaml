@@ -48,6 +48,8 @@ jobs:
           context: .
           file: ./${{ env.PROJECT_DIR }}/Dockerfile
           push: false
+          cache-from: type=gha,scope=manager
+          cache-to: type=gha,mode=max,scope=manager
           tags: |
             quay.io/kiln-fired/kiln-operator:latest
 
@@ -61,5 +63,7 @@ jobs:
           context: .
           file: ./${{ env.PROJECT_DIR }}/bundle.Dockerfile
           push: false
+          cache-from: type=gha,scope=bundle
+          cache-to: type=gha,mode=max,scope=bundle
           tags: |
             quay.io/kiln-fired/kiln-operator-bundle:latest
