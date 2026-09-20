@@ -3,9 +3,9 @@ module github.com/kiln-fired/kiln-operator
 go 1.26.0
 
 require (
-	github.com/btcsuite/btcd v0.23.4
-	github.com/btcsuite/btcd/btcutil v1.1.3
-	github.com/lightningnetwork/lnd v0.15.5-beta
+	github.com/btcsuite/btcd v0.25.1-0.20260310163610-1c55c7c18179
+	github.com/btcsuite/btcd/btcutil v1.1.6
+	github.com/lightningnetwork/lnd v0.21.0-beta
 	github.com/onsi/ginkgo/v2 v2.27.4
 	github.com/onsi/gomega v1.39.0
 	k8s.io/api v0.37.0
