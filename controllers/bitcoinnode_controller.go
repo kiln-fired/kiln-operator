@@ -197,11 +197,11 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 
 	btcdImage := b.Spec.ContainerImages.BtcdImage
 	if btcdImage == "" {
-		btcdImage = "quay.io/kiln-fired/btcd:latest"
+		btcdImage = "btcsuite/btcd:v0.26.2"
 	}
 	timerImage := b.Spec.ContainerImages.TimerImage
 	if timerImage == "" {
-		timerImage = "quay.io/kiln-fired/btcd:latest"
+		timerImage = "btcsuite/btcd:v0.26.2"
 	}
 	rewardAddressKey := b.Spec.Mining.RewardAddress.SecretKey
 	if rewardAddressKey == "" {
@@ -209,6 +209,10 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	}
 
 	environment := []corev1.EnvVar{
+		{
+			Name:  "HOME",
+			Value: "/home/btcd",
+		},
 		{
 			Name: "RPCUSER",
 			ValueFrom: &corev1.EnvVarSource{
@@ -248,10 +252,26 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		environment = append(environment, rewardAddress)
 	}
 
+	btcdArgs := []string{
+		"--simnet",
+		"--listen=0.0.0.0:18555",
+		"--rpclisten=0.0.0.0:18556",
+		"--rpcuser=$(RPCUSER)",
+		"--rpcpass=$(RPCPASS)",
+		"--rpccert=/rpc/rpc.cert",
+		"--rpckey=/rpc/rpc.key",
+		"--datadir=/data",
+		"--logdir=/data/logs",
+	}
+	if b.Spec.Mining.RewardAddress.SecretName != "" {
+		btcdArgs = append(btcdArgs, "--miningaddr=$(MINING_ADDRESS)")
+	}
+
 	btcd := corev1.Container{
 		Image:   btcdImage,
 		Name:    "btcd",
-		Command: []string{"./start-btcd.sh"},
+		Command: []string{"btcd"},
+		Args:    btcdArgs,
 		Ports: []corev1.ContainerPort{
 			{
 				ContainerPort: 18555,
@@ -267,6 +287,8 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 			Privileged:               ptr.To(false),
 			RunAsNonRoot:             ptr.To(true),
+			RunAsUser:                ptr.To(int64(65532)),
+			RunAsGroup:               ptr.To(int64(65532)),
 			AllowPrivilegeEscalation: ptr.To(false),
 			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		},
@@ -274,9 +296,13 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"/bin/bash",
-						"-c",
-						"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
+						"btcctl",
+						"--simnet",
+						"--rpcserver=127.0.0.1:18556",
+						"--rpcuser=$(RPCUSER)",
+						"--rpcpass=$(RPCPASS)",
+						"--rpccert=/rpc/rpc.cert",
+						"getblockcount",
 					},
 				},
 			},
@@ -286,9 +312,13 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"/bin/bash",
-						"-c",
-						"touch .btcd/btcd.conf && ./start-btcctl.sh getinfo",
+						"btcctl",
+						"--simnet",
+						"--rpcserver=127.0.0.1:18556",
+						"--rpcuser=$(RPCUSER)",
+						"--rpcpass=$(RPCPASS)",
+						"--rpccert=/rpc/rpc.cert",
+						"getblockcount",
 					},
 				},
 			},
@@ -298,7 +328,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "btcd-home",
-				MountPath: ".btcd",
+				MountPath: "/home/btcd",
 			},
 			{
 				Name:      "btcd-data",
@@ -321,19 +351,24 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		Image:   timerImage,
 		Name:    "timer",
 		Command: []string{"/bin/sh"},
-		Args:    []string{"-c", fmt.Sprintf("while true; do ./start-btcctl.sh generate 1; sleep %d;done", b.Spec.Mining.SecondsPerBlock)},
+		Args: []string{"-c", fmt.Sprintf(
+			"while true; do btcctl --simnet --rpcserver=127.0.0.1:18556 --rpcuser=$RPCUSER --rpcpass=$RPCPASS --rpccert=/rpc/rpc.cert generate 1; sleep %d; done",
+			b.Spec.Mining.SecondsPerBlock,
+		)},
 		Env:     environment,
 		SecurityContext: &corev1.SecurityContext{
 			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 			Privileged:               ptr.To(false),
 			RunAsNonRoot:             ptr.To(true),
+			RunAsUser:                ptr.To(int64(65532)),
+			RunAsGroup:               ptr.To(int64(65532)),
 			AllowPrivilegeEscalation: ptr.To(false),
 			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "btcd-home",
-				MountPath: ".btcd",
+				MountPath: "/home/btcd",
 			},
 			{
 				Name:      "btcd-data",
@@ -374,6 +409,9 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: ptr.To(int64(65532)),
+					},
 					Containers: containers,
 					Volumes: []corev1.Volume{
 						{
