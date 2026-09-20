@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - modernize-kubebuilder-v4
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.0'
+          cache: true
+
+      - name: Normalize modules
+        run: go mod tidy
+
+      - name: Run tests
+        run: make test
+
+      - name: Build manager
+        run: make build
+
+      - name: Upload normalized module files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: normalized-go-modules
+          path: |
+            go.mod
+            go.sum
