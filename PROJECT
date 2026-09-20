@@ -1,6 +1,7 @@
 domain: kiln-fired.github.io
+cliVersion: 4.16.0
 layout:
-- go.kubebuilder.io/v3
+- go.kubebuilder.io/v4
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
