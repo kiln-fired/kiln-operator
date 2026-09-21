@@ -483,12 +483,11 @@ func openLightningChannel(ctx context.Context, node *bitcoinv1alpha1.LightningNo
 	if err := doLNDOperatorRequest(ctx, node, secret, http.MethodPost, "/v1/channels", body, &response); err != nil {
 		return nil, err
 	}
-	if response.FundingTxidStr == "" {
-		return nil, fmt.Errorf("LND channel open response did not include a funding transaction")
+	result := &LightningChannelOpenResult{}
+	if response.FundingTxidStr != "" {
+		result.ChannelPoint = fmt.Sprintf("%s:%d", response.FundingTxidStr, response.OutputIndex)
 	}
-	return &LightningChannelOpenResult{
-		ChannelPoint: fmt.Sprintf("%s:%d", response.FundingTxidStr, response.OutputIndex),
-	}, nil
+	return result, nil
 }
 
 func closeLightningChannel(ctx context.Context, node *bitcoinv1alpha1.LightningNode, channel *bitcoinv1alpha1.LightningChannel, secret *corev1.Secret, channelPoint string) error {
