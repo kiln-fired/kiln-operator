@@ -56,6 +56,12 @@ type RewardAddress struct {
 	SecretKey string `json:"secretKey,omitempty"`
 }
 
+type NetworkSafetyPolicy struct {
+	// AllowMainnet must be explicitly set to true before Kiln will start a mainnet node.
+	// +kubebuilder:default=false
+	AllowMainnet bool `json:"allowMainnet,omitempty"`
+}
+
 type Mining struct {
 	// CPU Mining Enabled
 	// +kubebuilder:default=false
@@ -90,6 +96,14 @@ type BitcoinNodeSpec struct {
 	// +kubebuilder:default={btcdImage: "ghcr.io/btcsuite/btcd:v0.26.2", btcdTimerImage: "ghcr.io/btcsuite/btcd:v0.26.2"}
 	ContainerImages BTCDContainerImages `json:"image,omitempty"`
 
+	// Bitcoin network.
+	// +kubebuilder:default="simnet"
+	// +kubebuilder:validation:Enum=simnet;testnet;regtest;signet;mainnet
+	Network string `json:"network,omitempty"`
+
+	// Safety policy for network-sensitive behavior.
+	Safety NetworkSafetyPolicy `json:"safety,omitempty"`
+
 	// Configuration for the RPC Server
 	RPCServer RPCServer `json:"rpcServer,omitempty"`
 
@@ -110,6 +124,9 @@ type BitcoinNodeSpec struct {
 // BitcoinNodeStatus defines the observed state of BitcoinNode
 type BitcoinNodeStatus struct {
 	LastBlockCount int64 `json:"LastBlockCount"`
+
+	// Network is the resolved Bitcoin network.
+	Network string `json:"network,omitempty"`
 
 	// Conditions summarize the observed lifecycle and safety state.
 	// +optional
