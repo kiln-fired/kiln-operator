@@ -536,6 +536,10 @@ func lightningRPCPublisherName(l *bitcoinv1alpha1.LightningNode) string {
 	return derivedLightningName(l.Name, "-rpc-publisher")
 }
 
+func lightningOperatorRPCSecretName(l *bitcoinv1alpha1.LightningNode) string {
+	return derivedLightningName(l.Name, "-operator-rpc")
+}
+
 func derivedLightningName(name, suffix string) string {
 	const maxNameLength = 253
 	if len(name)+len(suffix) <= maxNameLength {
@@ -574,6 +578,33 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 		return err
 	}
 
+	operatorSecretName := lightningOperatorRPCSecretName(l)
+	operatorSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: operatorSecretName, Namespace: l.Namespace}, operatorSecret)
+	if errors.IsNotFound(err) {
+		operatorSecret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      operatorSecretName,
+				Namespace: l.Namespace,
+				Labels:    labelsForLightningNode(l.Name),
+				Annotations: map[string]string{
+					"bitcoin.kiln-fired.github.io/internal": "true",
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		if err := ctrl.SetControllerReference(l, operatorSecret, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, operatorSecret); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	} else if err := ensureControlledByLightningNode(operatorSecret, l, "Secret"); err != nil {
+		return err
+	}
+
 	serviceAccount := &corev1.ServiceAccount{}
 	err = r.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: l.Namespace}, serviceAccount)
 	if errors.IsNotFound(err) {
@@ -598,7 +629,7 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 			Rules: []rbacv1.PolicyRule{{
 				APIGroups:     []string{""},
 				Resources:     []string{"secrets"},
-				ResourceNames: []string{secretName},
+				ResourceNames: []string{secretName, operatorSecretName},
 				Verbs:         []string{"get", "update", "patch"},
 			}},
 		}
@@ -671,6 +702,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 	}
 	publisherName := lightningRPCPublisherName(l)
 	rpcSecretName := lightningRPCSecretName(l)
+	operatorRPCSecretName := lightningOperatorRPCSecretName(l)
 
 	lnd := corev1.Container{
 		Image:   lndImage,
@@ -758,8 +790,12 @@ while true; do
   CERT=/data/tls.cert
   READONLY=/data/data/chain/bitcoin/$NETWORK/readonly.macaroon
   INVOICE=/data/data/chain/bitcoin/$NETWORK/invoice.macaroon
+  ADMIN=/data/data/chain/bitcoin/$NETWORK/admin.macaroon
   if [ -s "$CERT" ] && [ -s "$READONLY" ] && [ -s "$INVOICE" ]; then
     lndinit -v store-secret --batch --overwrite --target=k8s       --k8s.namespace="$POD_NAMESPACE"       --k8s.secret-name="$RPC_SECRET_NAME"       "$CERT" "$READONLY" "$INVOICE"
+  fi
+  if [ -s "$CERT" ] && [ -s "$ADMIN" ]; then
+    lndinit -v store-secret --batch --overwrite --target=k8s       --k8s.namespace="$POD_NAMESPACE"       --k8s.secret-name="$OPERATOR_RPC_SECRET_NAME"       "$CERT" "$ADMIN"
   fi
   sleep 30
 done
@@ -767,6 +803,7 @@ done
 		Env: []corev1.EnvVar{
 			{Name: "NETWORK", Value: network},
 			{Name: "RPC_SECRET_NAME", Value: rpcSecretName},
+			{Name: "OPERATOR_RPC_SECRET_NAME", Value: operatorRPCSecretName},
 			{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
 		},
 		SecurityContext: &corev1.SecurityContext{

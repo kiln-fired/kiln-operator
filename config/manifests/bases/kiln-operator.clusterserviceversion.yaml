@@ -20,6 +20,11 @@ spec:
       kind: LightningNode
       name: lightningnodes.bitcoin.kiln-fired.github.io
       version: v1alpha1
+    - description: LightningPeer is the Schema for durable LND peer connectivity.
+      displayName: Lightning Peer
+      kind: LightningPeer
+      name: lightningpeers.bitcoin.kiln-fired.github.io
+      version: v1alpha1
   description: A Kubernetes operator for managing the state of Bitcoin and Lightning
     nodes.
   displayName: Kiln

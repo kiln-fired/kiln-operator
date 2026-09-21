@@ -67,6 +67,10 @@ var _ = Describe("LightningNode controller", func() {
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: lightningRPCSecretName(lightningNode), Namespace: Namespace}, rpcSecret); err == nil {
 				Expect(k8sClient.Delete(ctx, rpcSecret)).To(Succeed())
 			}
+			operatorSecret := &corev1.Secret{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: lightningOperatorRPCSecretName(lightningNode), Namespace: Namespace}, operatorSecret); err == nil {
+				Expect(k8sClient.Delete(ctx, operatorSecret)).To(Succeed())
+			}
 			publisherName := lightningRPCPublisherName(lightningNode)
 			serviceAccount := &corev1.ServiceAccount{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, serviceAccount); err == nil {
@@ -143,7 +147,8 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(publisher.Args).To(HaveLen(1))
 		Expect(publisher.Args[0]).To(ContainSubstring("readonly.macaroon"))
 		Expect(publisher.Args[0]).To(ContainSubstring("invoice.macaroon"))
-		Expect(publisher.Args[0]).ToNot(ContainSubstring("admin.macaroon"))
+		Expect(publisher.Args[0]).To(ContainSubstring("admin.macaroon"))
+		Expect(publisher.Args[0]).To(ContainSubstring("OPERATOR_RPC_SECRET_NAME"))
 		Expect(statefulSet.Spec.Template.Spec.ServiceAccountName).To(Equal(lightningRPCPublisherName(lightningNode)))
 		Expect(lnd.Image).To(Equal("docker.io/lightninglabs/lnd:v0.21.0-beta"))
 		Expect(lnd.Args).To(ContainElements(
@@ -170,13 +175,21 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lightningRPCSecretName(lightningNode), Namespace: Namespace}, rpcSecret)).To(Succeed())
 		Expect(rpcSecret.Data).To(BeEmpty())
 
+		operatorSecret := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lightningOperatorRPCSecretName(lightningNode), Namespace: Namespace}, operatorSecret)).To(Succeed())
+		Expect(operatorSecret.Data).To(BeEmpty())
+		Expect(operatorSecret.Annotations["bitcoin.kiln-fired.github.io/internal"]).To(Equal("true"))
+
 		publisherName := lightningRPCPublisherName(lightningNode)
 		serviceAccount := &corev1.ServiceAccount{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, serviceAccount)).To(Succeed())
 		role := &rbacv1.Role{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, role)).To(Succeed())
 		Expect(role.Rules).To(HaveLen(1))
-		Expect(role.Rules[0].ResourceNames).To(Equal([]string{lightningRPCSecretName(lightningNode)}))
+		Expect(role.Rules[0].ResourceNames).To(ConsistOf(
+			lightningRPCSecretName(lightningNode),
+			lightningOperatorRPCSecretName(lightningNode),
+		))
 		Expect(role.Rules[0].Verbs).To(ConsistOf("get", "update", "patch"))
 		roleBinding := &rbacv1.RoleBinding{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, roleBinding)).To(Succeed())

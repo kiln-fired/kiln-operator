@@ -26,6 +26,7 @@ Kiln provides three namespaced APIs.
 | --- | --- |
 | `BitcoinNode` | Runs a persistent btcd node and exposes its RPC service |
 | `LightningNode` | Runs a persistent LND node backed by a `BitcoinNode` or explicit btcd RPC connection |
+| `LightningPeer` | Declares a peer connection that Kiln continuously reconciles through LND |
 | `Seed` | Creates LND-compatible seed material for development/testing workflows |
 
 The primary runtime relationship is:
@@ -156,6 +157,31 @@ When `nodeRef` is set, Kiln:
 5. starts LND only after the dependency is usable
 
 Explicit RPC connection fields remain available for externally managed btcd nodes.
+
+## Declarative Lightning peers
+
+`LightningPeer` represents durable desired connectivity, not a one-shot `lncli connect` command.
+
+```yaml
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: LightningPeer
+metadata:
+  name: routing-peer
+spec:
+  nodeRef: lnd
+  pubkey: 02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  address: peer.example.com:9735
+```
+
+Kiln observes LND's active peer set before taking action. If the pubkey is already connected, reconciliation is satisfied and no connect request is issued. If it is absent, Kiln asks LND to establish a persistent connection and continues observing until the desired state is reached.
+
+`nodeRef` and `pubkey` are immutable because they define the identity of the relationship. The address can be updated and is used the next time a connection needs to be established.
+
+Status includes the observed connection address, whether the connection is inbound, and `NodeReady`, `Connected`, and `Ready` conditions.
+
+Deleting a `LightningPeer` requests a clean disconnect before its finalizer is released. LND does not allow a peer with active or pending channels to be disconnected, so deletion can remain pending until those channel dependencies are removed.
+
+Peer reconciliation uses a separate LightningNode-owned internal credential Secret. The public RPC Secret remains limited to TLS, read-only, and invoice macaroons and never exposes `admin.macaroon`.
 
 ## LND client access
 
@@ -373,8 +399,9 @@ Current defaults intentionally favor limited authority:
 
 - LND client credentials are Kubernetes Secrets
 - wallet passwords and seeds are referenced, not copied into status
-- the exported macaroon set excludes admin access
-- the credential publisher can update only its own destination Secret
+- the exported client macaroon set excludes admin access
+- internal administrative credentials are isolated in a LightningNode-owned Secret used by Kiln reconciliation
+- the credential publisher can update only its two node-owned destination Secrets
 - existing unrelated Secrets are never silently adopted
 - LND state uses single-pod storage fencing
 - persistent Lightning state is retained rather than silently destroyed
@@ -395,14 +422,16 @@ Implemented:
 - stable LND identity through recovery
 - restricted RPC credential publication
 - authenticated runtime status
+- declarative Lightning peer reconciliation
 - explicit network/mainnet guardrails
 - cross-resource network consistency
 - destructive real-cluster recovery testing
 
 Next areas under consideration:
 
-- imperative Lightning operation APIs
-- channel/payment workflows
+- declarative Lightning channel lifecycle
+- invoice lifecycle
+- payment intent only where it can be modeled safely as durable desired state
 - external backup/recovery integration
 - stronger seed custody models
 - additional Bitcoin or Lightning implementations where real requirements justify the abstraction

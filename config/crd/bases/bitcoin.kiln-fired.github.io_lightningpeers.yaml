@@ -1,0 +1,134 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: lightningpeers.bitcoin.kiln-fired.github.io
+spec:
+  group: bitcoin.kiln-fired.github.io
+  names:
+    kind: LightningPeer
+    listKind: LightningPeerList
+    plural: lightningpeers
+    singular: lightningpeer
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.nodeRef
+      name: Node
+      type: string
+    - jsonPath: .status.connected
+      name: Connected
+      type: boolean
+    - jsonPath: .status.observedAddress
+      name: Address
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: LightningPeer is the Schema for durable LND peer connectivity.
+        properties:
+          apiVersion:
+            description: APIVersion defines the versioned schema of this representation of an object.
+            type: string
+          kind:
+            description: Kind is a string value representing the REST resource this object represents.
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: LightningPeerSpec defines a desired persistent peer connection for an LND node.
+            properties:
+              address:
+                description: Network address used when establishing the peer connection, for example example.com:9735, 203.0.113.10:9735, or an onion address.
+                minLength: 1
+                type: string
+              nodeRef:
+                description: Name of the LightningNode in the same namespace.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: nodeRef is immutable
+                  rule: self == oldSelf
+              pubkey:
+                description: Compressed secp256k1 public key of the remote Lightning node.
+                pattern: ^[0-9a-fA-F]{66}$
+                type: string
+                x-kubernetes-validations:
+                - message: pubkey is immutable
+                  rule: self == oldSelf
+            required:
+            - address
+            - nodeRef
+            - pubkey
+            type: object
+          status:
+            description: LightningPeerStatus describes the observed LND peer connection.
+            properties:
+              conditions:
+                description: Conditions summarize node dependency and peer connection state.
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/)?(([A-Z]([a-z0-9]*[A-Z0-9])*)|([a-z0-9]([a-z0-9]*[A-Z0-9])*))$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              connected:
+                description: Connected reports whether LND currently lists the peer as connected.
+                type: boolean
+              inbound:
+                description: Inbound reports whether the active connection was initiated by the remote peer.
+                type: boolean
+              observedAddress:
+                description: ObservedAddress is the address reported by LND for the active connection.
+                type: string
+              phase:
+                description: Phase is a concise summary of reconciliation state.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

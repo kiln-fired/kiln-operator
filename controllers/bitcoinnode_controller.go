@@ -299,6 +299,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{Requeue: true}, nil
 		}
 		log.Info("Generated blocks", "numBlocks", len(hashes))
+		blockCount += int64(len(hashes))
 	}
 
 	miningEnabled, err := btcdClient.GetGenerate()
@@ -364,6 +365,10 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		{
 			Name:  "NETWORKFLAG",
 			Value: networkFlag,
+		},
+		{
+			Name:  "RPCSERVER",
+			Value: b.Name + "." + b.Namespace + ".svc.cluster.local:18556",
 		},
 		{
 			Name: "RPCUSER",
@@ -452,7 +457,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert stop || true",
+						"btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver=\"$RPCSERVER\" --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert stop || true",
 					},
 				},
 			},
@@ -463,11 +468,13 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
+						"btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver=\"$RPCSERVER\" --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
 					},
 				},
 			},
 			InitialDelaySeconds: 5,
+			TimeoutSeconds:      5,
+			PeriodSeconds:       10,
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -475,11 +482,13 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
+						"btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver=\"$RPCSERVER\" --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
 					},
 				},
 			},
 			InitialDelaySeconds: 5,
+			TimeoutSeconds:      5,
+			PeriodSeconds:       10,
 		},
 		Resources: b.Spec.Resources,
 		VolumeMounts: []corev1.VolumeMount{
@@ -509,7 +518,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		Name:    "timer",
 		Command: []string{"/bin/sh"},
 		Args: []string{"-c", fmt.Sprintf(
-			"while true; do btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver=127.0.0.1:18556 --rpcuser=$RPCUSER --rpcpass=$RPCPASS --rpccert=/rpc/rpc.cert generate 1; sleep %d; done",
+			"while true; do btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver=\"$RPCSERVER\" --rpcuser=$RPCUSER --rpcpass=$RPCPASS --rpccert=/rpc/rpc.cert generate 1; sleep %d; done",
 			b.Spec.Mining.SecondsPerBlock,
 		)},
 		Env:     environment,
