@@ -237,6 +237,7 @@ The controller exposes these conditions:
 
 | Condition | Meaning |
 | --- | --- |
+| `NetworkReady` | The selected network passes Kiln safety policy and matches the referenced Bitcoin node |
 | `BitcoinReady` | The configured Bitcoin backend is available |
 | `StorageFenced` | The Lightning volume is restricted to one pod |
 | `WalletReady` | The LND wallet is initialized/unlocked |
