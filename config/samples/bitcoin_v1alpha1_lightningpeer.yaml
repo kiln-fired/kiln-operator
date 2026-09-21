@@ -1,0 +1,8 @@
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: LightningPeer
+metadata:
+  name: example-peer
+spec:
+  nodeRef: lnd
+  pubkey: 02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  address: peer.example.com:9735
