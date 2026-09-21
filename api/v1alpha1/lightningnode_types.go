@@ -40,8 +40,9 @@ type BitcoinConnection struct {
 	// +optional
 	Host string `json:"host,omitempty"`
 
-	// Bitcoin network, e.g. simnet, testnet, regressionnet, mainnet
+	// Bitcoin network.
 	// +kubebuilder:default="simnet"
+	// +kubebuilder:validation:Enum=simnet;testnet;regtest;signet;mainnet
 	Network string `json:"network,omitempty"`
 
 	// Name of the secret that contains TLS certificates for the RPC server
@@ -128,6 +129,9 @@ type LightningNodeSpec struct {
 	// Configuration for the wallet
 	Wallet Wallet `json:"wallet,omitempty"`
 
+	// Safety policy for network-sensitive behavior.
+	Safety NetworkSafetyPolicy `json:"safety,omitempty"`
+
 	// RPC client credential publishing configuration
 	RPC RPCPublishing `json:"rpc,omitempty"`
 }
@@ -137,6 +141,10 @@ type LightningNodeStatus struct {
 	// Phase is a concise summary of the current lifecycle state.
 	// +optional
 	Phase string `json:"phase,omitempty"`
+
+	// Network is the resolved Bitcoin network used by LND.
+	// +optional
+	Network string `json:"network,omitempty"`
 
 	// Name of the Secret containing published LND client credentials.
 	// +optional
