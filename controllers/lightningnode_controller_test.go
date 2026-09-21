@@ -373,6 +373,10 @@ var _ = Describe("LightningNode controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
 			Spec: bitcoinv1alpha1.LightningNodeSpec{
 				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{NodeRef: "bitcoin-testnet"},
+				Wallet: bitcoinv1alpha1.Wallet{
+					Password: bitcoinv1alpha1.WalletPassword{SecretName: "wallet", SecretKey: "password"},
+					Seed:     bitcoinv1alpha1.SeedImport{SecretName: "seed"},
+				},
 			},
 		}
 		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())
