@@ -20,9 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // SeedSpec defines the desired state of Seed
 type SeedSpec struct {
 	// Name of secret to store master key
@@ -36,16 +33,14 @@ type SeedSpec struct {
 	// +optional
 	Passphrase string `json:"passphrase,omitempty"`
 
-	// Bitcoin network, e.g. simnet, testnet, regressionnet, mainnet
+	// Bitcoin network used to derive the root key.
 	// +kubebuilder:default="simnet"
+	// +kubebuilder:validation:Enum=simnet;mainnet
 	Network string `json:"network,omitempty"`
 }
 
 // SeedStatus defines the observed state of Seed
-type SeedStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-}
+type SeedStatus struct {}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status

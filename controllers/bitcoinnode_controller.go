@@ -19,6 +19,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/btcsuite/btcd/rpcclient"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,7 +35,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
-	"time"
 
 	bitcoinv1alpha1 "github.com/kiln-fired/kiln-operator/api/v1alpha1"
 )
@@ -180,7 +181,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		ObservedGeneration: bitcoinNode.Generation,
 	})
 
-	//Reconcile StatefulSet
+	// Reconcile StatefulSet
 	foundStatefulSet := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, foundStatefulSet)
 
@@ -246,8 +247,21 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	btcdClient, err := rpcclient.New(connCfg, nil)
-	blockCount, err := btcdClient.GetBlockCount()
+	if err != nil {
+		log.Error(err, "Failed to create Bitcoin RPC client")
+		meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "RPCConfigurationError",
+			Message:            "Bitcoin RPC client could not be configured",
+			ObservedGeneration: bitcoinNode.Generation,
+		})
+		_ = r.Status().Update(ctx, bitcoinNode)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+	defer btcdClient.Shutdown()
 
+	blockCount, err := btcdClient.GetBlockCount()
 	if err != nil {
 		log.Error(err, "Failed to get the block count")
 		meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
@@ -261,7 +275,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
-	log.Info("Retreived block count", "count", blockCount)
+	log.Info("Retrieved block count", "count", blockCount)
 
 	peer := bitcoinNode.Spec.Peer
 
@@ -532,7 +546,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 
 	containers := []corev1.Container{btcd}
 
-	if b.Spec.Mining.PeriodicBlocksEnabled == true {
+	if b.Spec.Mining.PeriodicBlocksEnabled {
 		containers = append(containers, timer)
 	}
 

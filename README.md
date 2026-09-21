@@ -1,8 +1,7 @@
 # Kiln
 
-[![PR CI](https://github.com/kiln-fired/kiln-operator/actions/workflows/pull-request.yaml/badge.svg)](https://github.com/kiln-fired/kiln-operator/actions/workflows/pull-request.yaml)
-[![Lightning E2E](https://github.com/kiln-fired/kiln-operator/actions/workflows/lightning-e2e.yaml/badge.svg)](https://github.com/kiln-fired/kiln-operator/actions/workflows/lightning-e2e.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/kiln-fired/kiln-operator)](https://goreportcard.com/report/github.com/kiln-fired/kiln-operator)
+[![Main CI](https://github.com/kiln-fired/kiln-operator/actions/workflows/push.yaml/badge.svg?branch=main)](https://github.com/kiln-fired/kiln-operator/actions/workflows/push.yaml?query=branch%3Amain)
+[![Lightning E2E](https://github.com/kiln-fired/kiln-operator/actions/workflows/lightning-e2e.yaml/badge.svg?branch=main)](https://github.com/kiln-fired/kiln-operator/actions/workflows/lightning-e2e.yaml?query=branch%3Amain)
 ![Go version](https://img.shields.io/github/go-mod/go-version/kiln-fired/kiln-operator)
 
 Kiln is a Kubernetes operator for running Bitcoin and Lightning infrastructure with explicit lifecycle, persistence, recovery, and credential-management semantics.
@@ -292,6 +291,7 @@ The test also confirms that an independent client pod can authenticate to LND th
 The destructive E2E is intentionally not run for every repository change. It runs:
 
 - on PRs that modify runtime/operator paths
+- on `main` pushes that modify those same runtime/operator paths
 - nightly on `main`
 - manually through `workflow_dispatch`
 

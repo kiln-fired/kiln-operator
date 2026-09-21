@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.10.0
+    controller-gen.kubebuilder.io/version: v0.22.0
   creationTimestamp: null
   name: seeds.bitcoin.kiln-fired.github.io
 spec:
@@ -40,8 +40,10 @@ spec:
                 type: string
               network:
                 default: simnet
-                description: Bitcoin network, e.g. simnet, testnet, regressionnet,
-                  mainnet
+                description: Bitcoin network used to derive the root key.
+                enum:
+                - simnet
+                - mainnet
                 type: string
               passphrase:
                 description: aezeed password

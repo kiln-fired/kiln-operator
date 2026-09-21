@@ -29,7 +29,7 @@ type BTCDContainerImages struct {
 
 	// Mining timer container image
 	// +kubebuilder:default="ghcr.io/btcsuite/btcd:v0.26.2"
-	TimerImage string `json:"btcdTimerImage,omitemply"`
+	TimerImage string `json:"btcdTimerImage,omitempty"`
 }
 
 type RPCServer struct {
@@ -37,7 +37,7 @@ type RPCServer struct {
 	CertSecret string `json:"certSecret,omitempty"`
 
 	// Name of the secret that contains RPC API credentials
-	ApiAuthSecretName string `json:"apiAuthSecretName,omiteempty"`
+	ApiAuthSecretName string `json:"apiAuthSecretName,omitempty"`
 
 	// Name of the secret key that contains RPC API username
 	ApiUserSecretKey string `json:"apiUserSecretKey,omitempty"`
@@ -89,9 +89,6 @@ type Mining struct {
 
 // BitcoinNodeSpec defines the desired state of BitcoinNode
 type BitcoinNodeSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Container image overrides
 	// +kubebuilder:default={btcdImage: "ghcr.io/btcsuite/btcd:v0.26.2", btcdTimerImage: "ghcr.io/btcsuite/btcd:v0.26.2"}
 	ContainerImages BTCDContainerImages `json:"image,omitempty"`

@@ -2,11 +2,13 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
+
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/lightningnetwork/lnd/aezeed"
-	"strings"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -93,6 +95,8 @@ func (r *SeedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		networkParams = &chaincfg.SimNetParams
 	case "mainnet":
 		networkParams = &chaincfg.MainNetParams
+	default:
+		return ctrl.Result{}, fmt.Errorf("unsupported seed network %q", network)
 	}
 
 	hdkey, err := hdkeychain.NewMaster(cipherSeed.Entropy[:], networkParams)
@@ -102,7 +106,7 @@ func (r *SeedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
-	//Reconcile Secret
+	// Reconcile Secret
 	foundSecret := &v1.Secret{}
 	err = r.Get(ctx, types.NamespacedName{Name: seed.Spec.SecretName, Namespace: seed.Namespace}, foundSecret)
 
@@ -117,7 +121,7 @@ func (r *SeedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
 		log.Error(err, "Failed to get Secret")
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
