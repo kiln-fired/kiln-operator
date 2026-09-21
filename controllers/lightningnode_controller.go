@@ -62,6 +62,24 @@ type LightningNodeReconciler struct {
 //+kubebuilder:rbac:groups=core,resources=services;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
+func resolvedLightningNetwork(l *bitcoinv1alpha1.LightningNode) string {
+	if l.Spec.BitcoinConnection.Network == "" {
+		return "simnet"
+	}
+	return l.Spec.BitcoinConnection.Network
+}
+
+func validateLightningNetworkPolicy(l *bitcoinv1alpha1.LightningNode) (string, string, error) {
+	network := resolvedLightningNetwork(l)
+	if _, err := bitcoinNetworkFlag(network); err != nil {
+		return network, "UnsupportedNetwork", err
+	}
+	if network == "mainnet" && !l.Spec.Safety.AllowMainnet {
+		return network, "MainnetOptInRequired", fmt.Errorf("mainnet requires spec.safety.allowMainnet=true")
+	}
+	return network, "PolicyAccepted", nil
+}
+
 func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 	lightningNode := &bitcoinv1alpha1.LightningNode{}
@@ -84,6 +102,37 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
+	network, networkReason, networkErr := validateLightningNetworkPolicy(lightningNode)
+	lightningNode.Status.Network = network
+	if networkErr != nil {
+		lightningNode.Status.Phase = "NetworkBlocked"
+		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+			Type:               "NetworkReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             networkReason,
+			Message:            networkErr.Error(),
+			ObservedGeneration: lightningNode.Generation,
+		})
+		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             networkReason,
+			Message:            networkErr.Error(),
+			ObservedGeneration: lightningNode.Generation,
+		})
+		if err := r.Status().Update(ctx, lightningNode); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+	meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+		Type:               "NetworkReady",
+		Status:             metav1.ConditionTrue,
+		Reason:             networkReason,
+		Message:            "Lightning network policy accepted for " + network,
+		ObservedGeneration: lightningNode.Generation,
+	})
+
 	meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
 		Type:               "StorageFenced",
 		Status:             metav1.ConditionTrue,
@@ -97,19 +146,27 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 	if !bitcoinReady {
+		networkReady := meta.FindStatusCondition(lightningNode.Status.Conditions, "NetworkReady")
+		reason := "BitcoinUnavailable"
+		message := "Lightning node is waiting for its Bitcoin dependency"
 		lightningNode.Status.Phase = "WaitingForBitcoin"
+		if networkReady != nil && networkReady.Status == metav1.ConditionFalse {
+			reason = networkReady.Reason
+			message = networkReady.Message
+			lightningNode.Status.Phase = "NetworkBlocked"
+		}
 		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
 			Type:               "WalletReady",
 			Status:             metav1.ConditionFalse,
-			Reason:             "BitcoinUnavailable",
-			Message:            "Wallet startup is blocked until the Bitcoin dependency is ready",
+			Reason:             reason,
+			Message:            "Wallet startup is blocked: " + message,
 			ObservedGeneration: lightningNode.Generation,
 		})
 		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
 			Type:               "Ready",
 			Status:             metav1.ConditionFalse,
-			Reason:             "BitcoinUnavailable",
-			Message:            "Lightning node is waiting for its Bitcoin dependency",
+			Reason:             reason,
+			Message:            message,
 			ObservedGeneration: lightningNode.Generation,
 		})
 		if err := r.Status().Update(ctx, lightningNode); err != nil {
@@ -323,6 +380,25 @@ func (r *LightningNodeReconciler) resolveBitcoinConnection(ctx context.Context, 
 			return connection, false, nil
 		}
 		return connection, false, err
+	}
+
+	bitcoinNetwork := resolvedBitcoinNetwork(bitcoinNode)
+	if connection.Network != bitcoinNetwork {
+		meta.SetStatusCondition(&l.Status.Conditions, metav1.Condition{
+			Type:               "NetworkReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             "NetworkMismatch",
+			Message:            fmt.Sprintf("LightningNode network %s does not match referenced BitcoinNode network %s", connection.Network, bitcoinNetwork),
+			ObservedGeneration: l.Generation,
+		})
+		meta.SetStatusCondition(&l.Status.Conditions, metav1.Condition{
+			Type:               "BitcoinReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             "NetworkMismatch",
+			Message:            "Referenced BitcoinNode uses a different network",
+			ObservedGeneration: l.Generation,
+		})
+		return connection, false, nil
 	}
 
 	ready := meta.FindStatusCondition(bitcoinNode.Status.Conditions, "Ready")
