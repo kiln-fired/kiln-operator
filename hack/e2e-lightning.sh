@@ -161,7 +161,25 @@ wait_for_lightning_sync() {
 mine_to_address() {
   local blocks="$1"
   local address="$2"
-  kubectl exec -n "$NAMESPACE" "$BITCOIN_NODE-0" -- /bin/sh -c     'btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver="$RPCSERVER" --rpcuser="$RPCUSER" --rpcpass="$RPCPASS" --rpccert=/rpc/rpc.cert generatetoaddress "$1" "$2"'     sh "$blocks" "$address" >/dev/null
+  local current target actual
+
+  current="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')"
+  target=$((current + blocks))
+
+  kubectl create secret generic mining-address -n "$NAMESPACE"     --from-literal=address="$address"     --dry-run=client -o yaml | kubectl apply -f -
+
+  kubectl patch bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" --type=merge     -p "{\"spec\":{\"mining\":{\"minBlocks\":$target}}}" >/dev/null
+
+  for i in {1..120}; do
+    actual="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}' 2>/dev/null || true)"
+    if [[ "$actual" =~ ^[0-9]+$ ]] && (( actual >= target )); then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "Timed out waiting for BitcoinNode to mine through block $target" >&2
+  return 1
 }
 
 kubectl create namespace "$NAMESPACE"
