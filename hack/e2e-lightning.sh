@@ -183,6 +183,12 @@ pvc_uid_before="$(kubectl get pvc -n "$NAMESPACE" "$pvc_name" -o jsonpath='{.met
 kubectl delete pod -n "$NAMESPACE" "$CLIENT_POD" --ignore-not-found --wait=true
 kubectl delete -f "$tmpdir/lightning.yaml" --wait=true --timeout=180s
 
+for resource in   "secret/lnd-rpc"   "serviceaccount/lnd-rpc-publisher"   "role/lnd-rpc-publisher"   "rolebinding/lnd-rpc-publisher"; do
+  if kubectl get -n "$NAMESPACE" "$resource" >/dev/null 2>&1; then
+    kubectl wait -n "$NAMESPACE" --for=delete "$resource" --timeout=60s
+  fi
+done
+
 kubectl get pvc -n "$NAMESPACE" "$pvc_name" >/dev/null
 pvc_uid_after_delete="$(kubectl get pvc -n "$NAMESPACE" "$pvc_name" -o jsonpath='{.metadata.uid}')"
 [[ "$pvc_uid_before" == "$pvc_uid_after_delete" ]]
