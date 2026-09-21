@@ -161,14 +161,24 @@ wait_for_lightning_sync() {
 mine_to_address() {
   local blocks="$1"
   local address="$2"
-  local current target actual
+  local current target actual configured_address
+
+  configured_address="$(kubectl get secret -n "$NAMESPACE" mining-address -o jsonpath='{.data.address}' | base64 -d)"
+  if [[ "$configured_address" != "$address" ]]; then
+    kubectl create secret generic mining-address -n "$NAMESPACE" \
+      --from-literal=address="$address" \
+      --dry-run=client -o yaml | kubectl apply -f -
+
+    echo "Restarting btcd to apply updated mining address"
+    kubectl delete pod -n "$NAMESPACE" "$BITCOIN_NODE-0" --wait=true
+    kubectl wait -n "$NAMESPACE" pod/"$BITCOIN_NODE-0" --for=condition=Ready --timeout=120s
+  fi
 
   current="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')"
   target=$((current + blocks))
 
-  kubectl create secret generic mining-address -n "$NAMESPACE"     --from-literal=address="$address"     --dry-run=client -o yaml | kubectl apply -f -
-
-  kubectl patch bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" --type=merge     -p "{\"spec\":{\"mining\":{\"minBlocks\":$target}}}" >/dev/null
+  kubectl patch bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" --type=merge \
+    -p "{\"spec\":{\"mining\":{\"minBlocks\":$target}}}" >/dev/null
 
   for i in {1..120}; do
     actual="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}' 2>/dev/null || true)"
