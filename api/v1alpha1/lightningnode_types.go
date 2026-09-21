@@ -30,37 +30,43 @@ type LNDContainerImages struct {
 	LndInitImage string `json:"lndInitImage,omitempty"`
 }
 
+type ExternalBitcoinConnection struct {
+	// Hostname of the externally managed Bitcoin RPC endpoint.
+	// +kubebuilder:validation:MinLength=1
+	Host string `json:"host"`
+
+	// Bitcoin network used by the external backend.
+	// +kubebuilder:validation:Enum=simnet;testnet;regtest;signet;mainnet
+	Network string `json:"network"`
+
+	// Name of the Secret containing the Bitcoin RPC TLS certificate.
+	// +kubebuilder:validation:MinLength=1
+	CertSecret string `json:"certSecret"`
+
+	// Name of the Secret containing Bitcoin RPC API credentials.
+	// +kubebuilder:validation:MinLength=1
+	ApiAuthSecretName string `json:"apiAuthSecretName"`
+
+	// Secret key containing the Bitcoin RPC username.
+	// +kubebuilder:validation:MinLength=1
+	ApiUserSecretKey string `json:"apiUserSecretKey"`
+
+	// Secret key containing the Bitcoin RPC password.
+	// +kubebuilder:validation:MinLength=1
+	ApiPasswordSecretKey string `json:"apiPasswordSecretKey"`
+}
+
+// +kubebuilder:validation:XValidation:rule="(has(self.nodeRef) && !has(self.external)) || (!has(self.nodeRef) && has(self.external))",message="exactly one of nodeRef or external must be configured"
 type BitcoinConnection struct {
-	// Name of a BitcoinNode in the same namespace. When set, Kiln derives the
-	// RPC host and secret references from that resource.
+	// Name of a BitcoinNode in the same namespace. Kiln derives network, RPC
+	// endpoint, TLS Secret, and API credential Secret from the referenced node.
 	// +optional
+	// +kubebuilder:validation:MinLength=1
 	NodeRef string `json:"nodeRef,omitempty"`
 
-	// Hostname of the Bitcoin node RPC endpoint. Used when nodeRef is not set.
+	// Explicit connection to an externally managed btcd node.
 	// +optional
-	Host string `json:"host,omitempty"`
-
-	// Bitcoin network.
-	// +kubebuilder:default="simnet"
-	// +kubebuilder:validation:Enum=simnet;testnet;regtest;signet;mainnet
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="network is immutable"
-	Network string `json:"network,omitempty"`
-
-	// Name of the secret that contains TLS certificates for the RPC server
-	// +optional
-	CertSecret string `json:"certSecret,omitempty"`
-
-	// Name of the secret that contains bitcoin node RPC API credentials
-	// +optional
-	ApiAuthSecretName string `json:"apiAuthSecretName,omitempty"`
-
-	// Name of the secret key that contains bitcoin node RPC API username
-	// +optional
-	ApiUserSecretKey string `json:"apiUserSecretKey,omitempty"`
-
-	// Name of the secret key that contains bitcoin node RPC API password
-	// +optional
-	ApiPasswordSecretKey string `json:"apiPasswordSecretKey,omitempty"`
+	External *ExternalBitcoinConnection `json:"external,omitempty"`
 }
 
 type WalletPassword struct {

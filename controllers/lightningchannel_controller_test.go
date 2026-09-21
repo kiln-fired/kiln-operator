@@ -73,7 +73,6 @@ var _ = Describe("LightningChannel controller", func() {
 		channel := &bitcoinv1alpha1.LightningChannel{
 			ObjectMeta: metav1.ObjectMeta{Name: channelName, Namespace: namespace},
 			Spec: bitcoinv1alpha1.LightningChannelSpec{
-				NodeRef:      nodeName,
 				PeerRef:      peerName,
 				CapacitySats: 100000,
 				Private:      true,

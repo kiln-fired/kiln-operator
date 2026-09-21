@@ -121,18 +121,17 @@ spec:
     allowMainnet: true
 ```
 
-For a `LightningNode`, the network remains under `bitcoinConnection`:
+For a managed `LightningNode`, the network is derived from its referenced `BitcoinNode`:
 
 ```yaml
 spec:
   bitcoinConnection:
     nodeRef: bitcoin-mainnet
-    network: mainnet
   safety:
     allowMainnet: true
 ```
 
-A referenced `BitcoinNode` and `LightningNode` must resolve to the same network. Kiln reports `NetworkReady=False` with reason `NetworkMismatch` and refuses to run LND when they differ.
+An external Bitcoin backend declares its network explicitly under `bitcoinConnection.external`. Once a Lightning wallet has resolved a network, Kiln refuses an in-place backend change that would move it to another network.
 
 If a running resource becomes blocked by network policy, Kiln gracefully removes its StatefulSet while retaining the PVC. Restoring a valid policy can therefore recover the same persisted node state.
 
@@ -146,7 +145,6 @@ A `LightningNode` can reference a same-namespace `BitcoinNode`:
 spec:
   bitcoinConnection:
     nodeRef: btcd
-    network: simnet
 ```
 
 When `nodeRef` is set, Kiln:
@@ -157,7 +155,21 @@ When `nodeRef` is set, Kiln:
 4. derives the btcd RPC username/password Secret references
 5. starts LND only after the dependency is usable
 
-Explicit RPC connection fields remain available for externally managed btcd nodes.
+Externally managed btcd nodes use an explicit alternative:
+
+```yaml
+spec:
+  bitcoinConnection:
+    external:
+      host: btcd.example.com:18556
+      network: signet
+      certSecret: btcd-rpc-tls
+      apiAuthSecretName: btcd-rpc-creds
+      apiUserSecretKey: username
+      apiPasswordSecretKey: password
+```
+
+Exactly one of `nodeRef` or `external` is allowed.
 
 ## Declarative Lightning peers
 
@@ -186,7 +198,7 @@ Peer reconciliation uses a separate LightningNode-owned internal credential Secr
 
 ## Declarative Lightning channels
 
-`LightningChannel` represents a channel that should exist between a local `LightningNode` and a declared `LightningPeer`.
+`LightningChannel` represents a channel that should exist through a declared `LightningPeer`. The peer is the channel's immediate dependency and identifies the local `LightningNode`.
 
 ```yaml
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
@@ -194,7 +206,6 @@ kind: LightningChannel
 metadata:
   name: alice-to-bob
 spec:
-  nodeRef: lnd
   peerRef: bob
   capacitySats: 100000
   private: true
@@ -209,8 +220,8 @@ Kiln does not adopt unrelated channels merely because they have the same peer or
 
 Channel creation waits for:
 
-- the referenced `LightningNode` to be ready and synchronized to Bitcoin
 - the referenced `LightningPeer` to be connected and ready
+- the peer's `LightningNode` dependency to remain usable and synchronized to Bitcoin
 - internal LND operator credentials to be available
 - explicit `safety.allowMainnet: true` on a mainnet `LightningChannel`
 

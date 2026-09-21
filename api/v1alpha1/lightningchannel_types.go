@@ -14,11 +14,6 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // LightningChannelSpec defines a desired LND channel.
 type LightningChannelSpec struct {
-	// Name of the local LightningNode in the same namespace.
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="nodeRef is immutable"
-	NodeRef string `json:"nodeRef"`
-
 	// Name of the LightningPeer that identifies the remote node.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="peerRef is immutable"
@@ -85,7 +80,6 @@ type LightningChannelStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Node",type=string,JSONPath=".spec.nodeRef"
 // +kubebuilder:printcolumn:name="Peer",type=string,JSONPath=".spec.peerRef"
 // +kubebuilder:printcolumn:name="Capacity",type=integer,JSONPath=".spec.capacitySats"
 // +kubebuilder:printcolumn:name="Active",type=boolean,JSONPath=".status.active"

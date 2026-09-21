@@ -79,7 +79,6 @@ metadata:
 spec:
   bitcoinConnection:
     nodeRef: $BITCOIN_NODE
-    network: simnet
   rpc:
     secretName: lnd-rpc
   wallet:
@@ -207,8 +206,6 @@ kubectl apply -f "$tmpdir/mainnet-blocked-bitcoin.yaml"
 wait_for_condition_status bitcoinnode blocked-mainnet-bitcoin NetworkReady False
 assert_no_statefulset blocked-mainnet-bitcoin
 [[ "$(kubectl get bitcoinnode -n "$NAMESPACE" blocked-mainnet-bitcoin -o jsonpath='{.status.network}')" == "mainnet" ]]
-kubectl delete -f "$tmpdir/mainnet-blocked-bitcoin.yaml" --wait=true --timeout=60s
-
 cat >"$tmpdir/mainnet-blocked-lightning.yaml" <<EOF
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: LightningNode
@@ -217,13 +214,14 @@ metadata:
   namespace: $NAMESPACE
 spec:
   bitcoinConnection:
-    network: mainnet
+    nodeRef: blocked-mainnet-bitcoin
 EOF
 kubectl apply -f "$tmpdir/mainnet-blocked-lightning.yaml"
 wait_for_condition_status lightningnode blocked-mainnet-lightning NetworkReady False
 assert_no_statefulset blocked-mainnet-lightning
 [[ "$(kubectl get lightningnode -n "$NAMESPACE" blocked-mainnet-lightning -o jsonpath='{.status.network}')" == "mainnet" ]]
 kubectl delete -f "$tmpdir/mainnet-blocked-lightning.yaml" --wait=true --timeout=60s
+kubectl delete -f "$tmpdir/mainnet-blocked-bitcoin.yaml" --wait=true --timeout=60s
 
 openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_NODE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_NODE,DNS:$BITCOIN_NODE.$NAMESPACE.svc,DNS:$BITCOIN_NODE.$NAMESPACE.svc.cluster.local"
 
@@ -336,7 +334,6 @@ metadata:
 spec:
   bitcoinConnection:
     nodeRef: $BITCOIN_NODE
-    network: simnet
   rpc:
     secretName: bob-rpc
   wallet:
@@ -392,7 +389,6 @@ metadata:
   name: alice-to-bob
   namespace: $NAMESPACE
 spec:
-  nodeRef: $LIGHTNING_NODE
   peerRef: bob
   capacitySats: 100000
   private: true
