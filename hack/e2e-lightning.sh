@@ -292,6 +292,14 @@ alice_address="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --   ln
 
 echo "Funding Alice's simnet wallet"
 mine_to_address 301 "$alice_address"
+
+# A large instantaneous simnet bootstrap can leave LND at the correct tip while
+# GetInfo still reports synced_to_chain=false. Restart LND against the now-stable
+# chain and require a fresh wallet sync before any peer/channel reconciliation.
+echo "Restarting Alice LND after initial simnet bootstrap"
+kubectl delete pod -n "$NAMESPACE" "$LIGHTNING_NODE-0" --wait=true
+kubectl wait -n "$NAMESPACE" pod/"$LIGHTNING_NODE-0" --for=condition=Ready --timeout=180s
+kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=180s
 wait_for_lightning_sync "$LIGHTNING_NODE"
 
 bitcoin_height="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')"
