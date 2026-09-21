@@ -233,6 +233,26 @@ func (r *LightningPeerReconciler) resolveLightningPeerNode(ctx context.Context, 
 		return node, nil, false, nil
 	}
 
+	if !node.Status.Runtime.SyncedToChain {
+		peer.Status.Phase = "WaitingForNode"
+		peer.Status.Connected = false
+		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
+			Type:               "NodeReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LightningNodeChainNotSynced",
+			Message:            "Referenced LightningNode has not synchronized to its Bitcoin chain",
+			ObservedGeneration: peer.Generation,
+		})
+		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LightningNodeChainNotSynced",
+			Message:            "Peer reconciliation is waiting for LND chain synchronization",
+			ObservedGeneration: peer.Generation,
+		})
+		return node, nil, false, nil
+	}
+
 	secret := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: lightningOperatorRPCSecretName(node), Namespace: node.Namespace}, secret)
 	if err != nil {
