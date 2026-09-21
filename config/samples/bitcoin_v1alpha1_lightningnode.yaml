@@ -4,12 +4,8 @@ metadata:
   name: lnd
 spec:
   bitcoinConnection:
-    host: btcd
+    nodeRef: btcd
     network: simnet
-    certSecret: btcd-rpc-tls
-    apiAuthSecretName: btcd-rpc-creds
-    apiUserSecretKey: username
-    apiPasswordSecretKey: password
   wallet:
     password:
       secretName: alice-wallet
