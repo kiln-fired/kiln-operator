@@ -46,6 +46,24 @@ var _ = Describe("LightningNode controller", func() {
 				Expect(k8sClient.Delete(ctx, service)).To(Succeed())
 			}
 
+			rpcSecret := &corev1.Secret{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: lightningRPCSecretName(lightningNode), Namespace: Namespace}, rpcSecret); err == nil {
+				Expect(k8sClient.Delete(ctx, rpcSecret)).To(Succeed())
+			}
+			publisherName := lightningRPCPublisherName(lightningNode)
+			serviceAccount := &corev1.ServiceAccount{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, serviceAccount); err == nil {
+				Expect(k8sClient.Delete(ctx, serviceAccount)).To(Succeed())
+			}
+			role := &rbacv1.Role{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, role); err == nil {
+				Expect(k8sClient.Delete(ctx, role)).To(Succeed())
+			}
+			roleBinding := &rbacv1.RoleBinding{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, roleBinding); err == nil {
+				Expect(k8sClient.Delete(ctx, roleBinding)).To(Succeed())
+			}
+
 			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(func() bool {
@@ -179,6 +197,36 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "WalletReady").Status).To(Equal(metav1.ConditionTrue))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "CredentialsReady").Status).To(Equal(metav1.ConditionTrue))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
+	})
+
+	It("refuses to grant publisher access to an unrelated Secret", func() {
+		lightningNode := &bitcoinv1alpha1.LightningNode{
+			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.LightningNodeSpec{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{
+					Host:                 "btcd",
+					Network:              "simnet",
+					CertSecret:           "btcd-rpc-tls",
+					ApiAuthSecretName:    "btcd-rpc-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
+				},
+				Wallet: bitcoinv1alpha1.Wallet{
+					Password: bitcoinv1alpha1.WalletPassword{SecretName: "wallet", SecretKey: "password"},
+					Seed:     bitcoinv1alpha1.SeedImport{SecretName: "seed"},
+				},
+			},
+		}
+		unrelated := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: lightningRPCSecretName(lightningNode), Namespace: Namespace,
+		}}
+		Expect(k8sClient.Create(ctx, unrelated)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, unrelated) })
+
+		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("is not controlled by LightningNode"))
 	})
 
 	It("derives RPC connection details from a ready BitcoinNode", func() {
