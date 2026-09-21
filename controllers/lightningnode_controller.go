@@ -80,6 +80,24 @@ func validateLightningNetworkPolicy(l *bitcoinv1alpha1.LightningNode) (string, s
 	return network, "PolicyAccepted", nil
 }
 
+func (r *LightningNodeReconciler) stopLightningWorkloadForPolicy(ctx context.Context, l *bitcoinv1alpha1.LightningNode) (bool, error) {
+	ss := &appsv1.StatefulSet{}
+	err := r.Get(ctx, types.NamespacedName{Name: l.Name, Namespace: l.Namespace}, ss)
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if ss.DeletionTimestamp.IsZero() {
+		propagation := metav1.DeletePropagationForeground
+		if err := r.Delete(ctx, ss, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 	lightningNode := &bitcoinv1alpha1.LightningNode{}
@@ -122,6 +140,13 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		})
 		if err := r.Status().Update(ctx, lightningNode); err != nil {
 			return ctrl.Result{}, err
+		}
+		stopping, err := r.stopLightningWorkloadForPolicy(ctx, lightningNode)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if stopping {
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
 		return ctrl.Result{}, nil
 	}
@@ -398,6 +423,11 @@ func (r *LightningNodeReconciler) resolveBitcoinConnection(ctx context.Context, 
 			Message:            "Referenced BitcoinNode uses a different network",
 			ObservedGeneration: l.Generation,
 		})
+		stopping, err := r.stopLightningWorkloadForPolicy(ctx, l)
+		if err != nil {
+			return connection, false, err
+		}
+		_ = stopping
 		return connection, false, nil
 	}
 
