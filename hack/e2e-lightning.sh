@@ -354,13 +354,75 @@ echo "Initial LND identity: $initial_pubkey"
 peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
 [[ "$peer_pubkey" == "$bob_pubkey" ]]
 
+cat >"$tmpdir/channel.yaml" <<EOF
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: LightningChannel
+metadata:
+  name: alice-to-bob
+  namespace: $NAMESPACE
+spec:
+  nodeRef: $LIGHTNING_NODE
+  peerRef: bob
+  capacitySats: 100000
+  private: true
+  minConfs: 1
+EOF
+
+echo "Creating declarative Lightning channel"
+kubectl apply -f "$tmpdir/channel.yaml"
+kubectl wait -n "$NAMESPACE" lightningchannel/alice-to-bob --for=condition=Funded --timeout=180s
+
+channel_point=""
+for i in {1..90}; do
+  channel_point="$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.channelPoint}' 2>/dev/null || true)"
+  [[ -n "$channel_point" ]] && break
+  sleep 2
+done
+[[ -n "$channel_point" ]]
+
+echo "Confirming channel funding transaction"
+mine_to_address 6 "$alice_address"
+wait_for_lightning_sync "$LIGHTNING_NODE"
+wait_for_lightning_sync "$SECOND_LIGHTNING_NODE"
+kubectl wait -n "$NAMESPACE" lightningchannel/alice-to-bob --for=condition=Ready --timeout=180s
+
+channel_point_before="$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.channelPoint}')"
+[[ "$channel_point_before" == "$channel_point" ]]
+[[ "$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.active}')" == "true" ]]
+
+channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
+[[ "$channel_count" == "1" ]]
+
 echo "Restarting operator"
 kubectl rollout restart deployment/kiln-operator-controller-manager -n kiln-operator-system
 kubectl rollout status deployment/kiln-operator-controller-manager -n kiln-operator-system --timeout=120s
 assert_same_pubkey "$initial_pubkey"
 kubectl wait -n "$NAMESPACE" lightningpeer/bob --for=condition=Ready --timeout=120s
+kubectl wait -n "$NAMESPACE" lightningchannel/alice-to-bob --for=condition=Ready --timeout=120s
+[[ "$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.channelPoint}')" == "$channel_point_before" ]]
+
 peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
 [[ "$peer_pubkey" == "$bob_pubkey" ]]
+
+channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
+[[ "$channel_count" == "1" ]]
+
+echo "Deleting LightningChannel and verifying cooperative close"
+kubectl delete -f "$tmpdir/channel.yaml" --wait=false
+for i in {1..60}; do
+  channel_phase="$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  [[ "$channel_phase" == "Closing" || "$channel_phase" == "CloseBlocked" ]] && break
+  sleep 1
+done
+[[ "$channel_phase" == "Closing" ]]
+
+mine_to_address 6 "$alice_address"
+wait_for_lightning_sync "$LIGHTNING_NODE"
+wait_for_lightning_sync "$SECOND_LIGHTNING_NODE"
+kubectl wait -n "$NAMESPACE" --for=delete lightningchannel/alice-to-bob --timeout=180s
+
+channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
+[[ "$channel_count" == "0" ]]
 
 echo "Deleting LightningPeer and verifying finalizer-driven disconnect"
 kubectl delete -f "$tmpdir/peer.yaml" --wait=true --timeout=120s
