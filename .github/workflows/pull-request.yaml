@@ -43,7 +43,7 @@ jobs:
         run: make build
 
       - name: verify default Bitcoin runtime image
-        run: docker pull btcsuite/btcd:v0.26.2
+        run: docker pull ghcr.io/btcsuite/btcd:v0.26.2
 
       - name: build operator image
         uses: docker/build-push-action@v7
