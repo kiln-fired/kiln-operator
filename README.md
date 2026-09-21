@@ -17,7 +17,7 @@ The current implementation is intentionally focused rather than generic:
 Kiln currently optimizes for one thing: making a Bitcoin-backed LND node behave predictably under normal Kubernetes operations such as pod replacement, controller restart, rescheduling, and custom-resource deletion/recreation.
 
 > [!IMPORTANT]
-> Kiln is still under active development. The current work has concentrated on lifecycle safety and recovery. Mainnet operational policy, automated backups, seed custody, and declarative payment/channel APIs are not yet part of the supported contract.
+> Kiln is still under active development. The current work has concentrated on lifecycle safety and recovery. Mainnet requires explicit opt-in. Automated backups, seed custody, and declarative payment/channel APIs are not yet part of the supported contract.
 
 ## What Kiln manages
 
@@ -96,6 +96,46 @@ Kiln adds the Kubernetes Service DNS name to the LND TLS certificate and disable
 The TLS certificate is stored with the persisted LND state. Pod replacement must not rotate the node's self-signed certificate merely because the pod IP changed.
 
 This matters because Kiln publishes that certificate as client trust material.
+
+## Network and mainnet safety
+
+Kiln defaults both Bitcoin and Lightning resources to `simnet`.
+
+Supported network values are:
+
+- `simnet`
+- `testnet`
+- `regtest`
+- `signet`
+- `mainnet`
+
+The resolved network is reported in `status.network`, and both node types expose a `NetworkReady` condition.
+
+Mainnet is deliberately different. Kiln will not start a mainnet `BitcoinNode` or `LightningNode` unless that resource explicitly opts in:
+
+```yaml
+spec:
+  network: mainnet
+  safety:
+    allowMainnet: true
+```
+
+For a `LightningNode`, the network remains under `bitcoinConnection`:
+
+```yaml
+spec:
+  bitcoinConnection:
+    nodeRef: bitcoin-mainnet
+    network: mainnet
+  safety:
+    allowMainnet: true
+```
+
+A referenced `BitcoinNode` and `LightningNode` must resolve to the same network. Kiln reports `NetworkReady=False` with reason `NetworkMismatch` and refuses to run LND when they differ.
+
+If a running resource becomes blocked by network policy, Kiln gracefully removes its StatefulSet while retaining the PVC. Restoring a valid policy can therefore recover the same persisted node state.
+
+Kiln also refuses its automatic mining controls on mainnet. `cpuMiningEnabled`, `minBlocks`, and `periodicBlocksEnabled` are development/test-network conveniences and cannot be enabled for a mainnet `BitcoinNode`.
 
 ## Bitcoin dependency
 
@@ -354,12 +394,13 @@ Implemented:
 - stable LND identity through recovery
 - restricted RPC credential publication
 - authenticated runtime status
+- explicit network/mainnet guardrails
+- cross-resource network consistency
 - destructive real-cluster recovery testing
 
 Next areas under consideration:
 
 - imperative Lightning operation APIs
-- explicit mainnet guardrails
 - channel/payment workflows
 - external backup/recovery integration
 - stronger seed custody models
