@@ -118,7 +118,6 @@ func (r *LightningChannelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	r.applyLightningChannelObservation(channel, observation)
 	switch observation.State {
 	case "Open":
-		channel.Status.Phase = "Open"
 		meta.SetStatusCondition(&channel.Status.Conditions, metav1.Condition{
 			Type:               "Funded",
 			Status:             metav1.ConditionTrue,
@@ -126,11 +125,26 @@ func (r *LightningChannelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			Message:            "LND reports the Kiln-owned channel as open",
 			ObservedGeneration: channel.Generation,
 		})
+		if !observation.Active {
+			channel.Status.Phase = "Inactive"
+			meta.SetStatusCondition(&channel.Status.Conditions, metav1.Condition{
+				Type:               "Ready",
+				Status:             metav1.ConditionFalse,
+				Reason:             "ChannelInactive",
+				Message:            "Channel is open but LND does not currently consider it active",
+				ObservedGeneration: channel.Generation,
+			})
+			if err := r.Status().Update(ctx, channel); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		channel.Status.Phase = "Open"
 		meta.SetStatusCondition(&channel.Status.Conditions, metav1.Condition{
 			Type:               "Ready",
 			Status:             metav1.ConditionTrue,
-			Reason:             "ChannelOpen",
-			Message:            "Desired Lightning channel exists",
+			Reason:             "ChannelActive",
+			Message:            "Desired Lightning channel exists and is active",
 			ObservedGeneration: channel.Generation,
 		})
 		if err := r.Status().Update(ctx, channel); err != nil {
