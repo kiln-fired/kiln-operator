@@ -109,9 +109,11 @@ type BitcoinNodeSpec struct {
 
 // BitcoinNodeStatus defines the observed state of BitcoinNode
 type BitcoinNodeStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 	LastBlockCount int64 `json:"LastBlockCount"`
+
+	// Conditions summarize the observed lifecycle and safety state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 //+kubebuilder:object:root=true
