@@ -72,6 +72,13 @@ spec:
                     description: lnd-init container image
                     type: string
                 type: object
+              rpc:
+                description: RPC client credential publishing configuration
+                properties:
+                  secretName:
+                    description: Name of the Secret that receives LND client credentials. Defaults to <lightningNode name>-rpc.
+                    type: string
+                type: object
               wallet:
                 description: Configuration for the wallet
                 properties:
@@ -106,7 +113,7 @@ spec:
             description: LightningNodeStatus defines the observed state of LightningNode
             properties:
               conditions:
-                description: Conditions summarize dependency, wallet, storage, and readiness state.
+                description: Conditions summarize dependency, wallet, credential, storage, and readiness state.
                 items:
                   description: Condition contains details for one aspect of the current state of this API Resource.
                   properties:
@@ -151,6 +158,12 @@ spec:
                 type: array
               phase:
                 description: Phase is a concise summary of the current lifecycle state.
+                type: string
+              rpcAddress:
+                description: RPCAddress is the in-cluster LND RPC endpoint.
+                type: string
+              rpcSecretName:
+                description: Name of the Secret containing published LND client credentials.
                 type: string
             type: object
         type: object
