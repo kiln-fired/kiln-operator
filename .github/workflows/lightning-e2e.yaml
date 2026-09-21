@@ -1,0 +1,60 @@
+name: lightning e2e
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lightning-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: check out code
+        uses: actions/checkout@v7
+
+      - name: install go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.0'
+          cache: true
+
+      - name: install kind
+        run: |
+          curl -fsSLo /tmp/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
+          echo "aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  /tmp/kind" | sha256sum -c -
+          sudo install -m 0755 /tmp/kind /usr/local/bin/kind
+
+      - name: create cluster
+        run: |
+          kind create cluster             --name kiln-e2e             --image kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5             --wait 120s
+          kubectl get nodes
+          kubectl get storageclass
+
+      - name: build and load images
+        run: |
+          docker build -t kiln-operator:e2e .
+          docker pull ghcr.io/btcsuite/btcd:v0.26.2
+          docker pull docker.io/lightninglabs/lnd:v0.21.0-beta
+          docker pull docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta
+          kind load docker-image --name kiln-e2e             kiln-operator:e2e             ghcr.io/btcsuite/btcd:v0.26.2             docker.io/lightninglabs/lnd:v0.21.0-beta             docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta
+
+      - name: deploy operator
+        run: |
+          make deploy IMG=kiln-operator:e2e
+          kubectl rollout status deployment/kiln-operator-controller-manager             -n kiln-operator-system             --timeout=120s
+
+      - name: run Lightning recovery e2e
+        run: |
+          chmod +x hack/e2e-lightning.sh
+          hack/e2e-lightning.sh
+
+      - name: dump kind logs
+        if: failure()
+        run: kind export logs /tmp/kind-logs --name kiln-e2e
+
+      - name: clean up cluster
+        if: always()
+        run: kind delete cluster --name kiln-e2e
