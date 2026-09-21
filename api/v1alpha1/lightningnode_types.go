@@ -90,6 +90,25 @@ type Wallet struct {
 	Seed SeedImport `json:"seed,omitempty"`
 }
 
+type LightningRuntimeStatus struct {
+	// IdentityPubkey is the persistent LND node identity.
+	IdentityPubkey string `json:"identityPubkey,omitempty"`
+	// Alias is the node alias reported by LND.
+	Alias string `json:"alias,omitempty"`
+	// Version is the running LND version.
+	Version string `json:"version,omitempty"`
+	// BlockHeight is LND's current best block height.
+	BlockHeight uint32 `json:"blockHeight,omitempty"`
+	// SyncedToChain reports whether the wallet is synchronized with Bitcoin.
+	SyncedToChain bool `json:"syncedToChain,omitempty"`
+	// SyncedToGraph reports whether LND considers its public graph synchronized.
+	SyncedToGraph bool `json:"syncedToGraph,omitempty"`
+	NumPeers uint32 `json:"numPeers,omitempty"`
+	NumPendingChannels uint32 `json:"numPendingChannels,omitempty"`
+	NumActiveChannels uint32 `json:"numActiveChannels,omitempty"`
+	NumInactiveChannels uint32 `json:"numInactiveChannels,omitempty"`
+}
+
 type RPCPublishing struct {
 	// Name of the Secret that receives LND client credentials.
 	// Defaults to <lightningNode name>-rpc.
@@ -126,6 +145,10 @@ type LightningNodeStatus struct {
 	// RPCAddress is the in-cluster LND RPC endpoint.
 	// +optional
 	RPCAddress string `json:"rpcAddress,omitempty"`
+
+	// Runtime contains authenticated observations from LND GetInfo.
+	// +optional
+	Runtime LightningRuntimeStatus `json:"runtime,omitempty"`
 
 	// Conditions summarize dependency, wallet, credential, storage, and readiness state.
 	// +optional
