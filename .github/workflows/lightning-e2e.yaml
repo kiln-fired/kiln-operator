@@ -2,7 +2,23 @@ name: lightning e2e
 
 on:
   pull_request:
+    paths:
+      - "api/**"
+      - "controllers/**"
+      - "config/**"
+      - "Dockerfile"
+      - "Makefile"
+      - "go.mod"
+      - "go.sum"
+      - "hack/e2e-lightning.sh"
+      - ".github/workflows/lightning-e2e.yaml"
+  schedule:
+    - cron: "23 8 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: lightning-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
