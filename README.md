@@ -12,7 +12,17 @@ The project currently provides three namespaced APIs:
 - `LightningNode` for LND nodes
 - `Seed` for LND-compatible seed material
 
-The current Lightning runtime baseline is LND 0.21 with `lndinit` for wallet initialization.
+The current Lightning runtime baseline is upstream `lightninglabs/lnd:v0.21.0-beta` with `lndinit` for idempotent wallet initialization.
+
+### Lightning lifecycle and recovery
+
+A `LightningNode` may reference a same-namespace `BitcoinNode` through `spec.bitcoinConnection.nodeRef`. Kiln waits for the referenced Bitcoin node's `Ready` condition before starting LND and derives the btcd RPC host and secret references from it. The explicit RPC connection fields remain available for externally managed Bitcoin nodes.
+
+Lightning state is treated as non-reconstructable state. The LND data directory is stored on a `ReadWriteOncePod` PVC, the StatefulSet uses an `OnDelete` update strategy, and PVCs are retained when the StatefulSet is deleted or scaled. Deleting a `LightningNode` first foreground-deletes its StatefulSet so LND can perform a graceful `lncli stop`; the retained PVC is intentionally not deleted by the controller.
+
+Wallet seed material and wallet passwords are supplied only through Kubernetes Secret references. The controller does not copy them into the custom resource or status. `lndinit` validates an existing wallet instead of recreating it, so pod replacement and controller restarts reuse the persisted wallet and node identity.
+
+The status exposes `BitcoinReady`, `StorageFenced`, `WalletReady`, and `Ready` conditions plus a concise lifecycle phase.
 
 ## Requirements
 
