@@ -28,7 +28,7 @@ The status exposes `BitcoinReady`, `StorageFenced`, `WalletReady`, `CredentialsR
 
 Kiln publishes restricted LND client credentials to a managed Secret after the node becomes available. By default the Secret is named `<lightning-node>-rpc`; set `spec.rpc.secretName` to choose another name. The Secret contains `tls.cert`, `readonly.macaroon`, and `invoice.macaroon`. The admin macaroon is intentionally not exported.
 
-`status.rpcAddress` contains the in-cluster RPC endpoint and `status.rpcSecretName` identifies the credential Secret. LND includes the Kubernetes Service DNS name in its TLS certificate and enables TLS auto-refresh so recovered nodes remain usable through the Service.
+`status.rpcAddress` contains the in-cluster RPC endpoint and `status.rpcSecretName` identifies the credential Secret. LND includes the Kubernetes Service DNS name in its persisted TLS certificate. Kiln deliberately does not enable LND TLS auto-refresh because pod IP changes must not rotate the self-signed certificate and invalidate already-published client trust material.
 
 For example, after copying the Secret values into files inside a client pod:
 
