@@ -158,6 +158,12 @@ wait_for_lightning_sync() {
   return 1
 }
 
+mine_to_address() {
+  local blocks="$1"
+  local address="$2"
+  kubectl exec -n "$NAMESPACE" "$BITCOIN_NODE-0" -- /bin/sh -c     'btcctl --configfile=/dev/null $NETWORKFLAG --rpcserver="$RPCSERVER" --rpcuser="$RPCUSER" --rpcpass="$RPCPASS" --rpccert=/rpc/rpc.cert generatetoaddress "$1" "$2"'     sh "$blocks" "$address" >/dev/null
+}
+
 kubectl create namespace "$NAMESPACE"
 
 cat >"$tmpdir/mainnet-blocked-bitcoin.yaml" <<EOF
