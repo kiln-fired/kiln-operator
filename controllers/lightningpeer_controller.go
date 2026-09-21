@@ -432,7 +432,7 @@ func doLNDOperatorRequest(ctx context.Context, node *bitcoinv1alpha1.LightningNo
 
 	host := node.Name + "." + node.Namespace + ".svc.cluster.local"
 	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 30 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{
 			RootCAs:    roots,
 			ServerName: host,
@@ -450,17 +450,17 @@ func doLNDOperatorRequest(ctx context.Context, node *bitcoinv1alpha1.LightningNo
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("LND peer request failed: %w", err)
+		return fmt.Errorf("LND operator request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		response, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("LND peer request returned %s: %s", resp.Status, string(response))
+		return fmt.Errorf("LND operator request returned %s: %s", resp.Status, string(response))
 	}
 	if responseBody != nil {
 		if err := json.NewDecoder(resp.Body).Decode(responseBody); err != nil {
-			return fmt.Errorf("decode LND peer response: %w", err)
+			return fmt.Errorf("decode LND operator response: %w", err)
 		}
 	}
 	return nil
