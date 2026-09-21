@@ -458,6 +458,8 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 			"--btcd.rpcpass=$(RPCPASS)",
 			"--rpclisten=0.0.0.0:10009",
 			"--listen=0.0.0.0:9735",
+			"--tlsextradomain=$(RPCSERVICE)",
+			"--tlsautorefresh",
 		},
 		Ports: []corev1.ContainerPort{
 			{ContainerPort: 9735, Name: "p2p"},
@@ -466,6 +468,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 		Env: []corev1.EnvVar{
 			{Name: "NETWORK", Value: network},
 			{Name: "RPCHOST", Value: connection.Host},
+			{Name: "RPCSERVICE", Value: l.Name + "." + l.Namespace + ".svc.cluster.local"},
 			{
 				Name: "RPCUSER",
 				ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
