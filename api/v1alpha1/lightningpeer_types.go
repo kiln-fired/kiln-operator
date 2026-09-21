@@ -26,7 +26,7 @@ type LightningPeerSpec struct {
 	NodeRef string `json:"nodeRef"`
 
 	// Compressed secp256k1 public key of the remote Lightning node.
-	// +kubebuilder:validation:Pattern=^[0-9a-fA-F]{66}$
+	// +kubebuilder:validation:Pattern="^[0-9a-fA-F]{66}$"
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="pubkey is immutable"
 	Pubkey string `json:"pubkey"`
 
