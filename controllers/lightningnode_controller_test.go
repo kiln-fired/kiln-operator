@@ -117,6 +117,8 @@ var _ = Describe("LightningNode controller", func() {
 			"--bitcoin.active",
 			"--bitcoin.$(NETWORK)",
 			"--bitcoin.node=btcd",
+			"--tlsextradomain=$(RPCSERVICE)",
+			"--tlsautorefresh",
 		))
 		Expect(lnd.Lifecycle).ToNot(BeNil())
 		Expect(lnd.Lifecycle.PreStop).ToNot(BeNil())
