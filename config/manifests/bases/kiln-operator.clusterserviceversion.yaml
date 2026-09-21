@@ -25,6 +25,11 @@ spec:
       kind: LightningPeer
       name: lightningpeers.bitcoin.kiln-fired.github.io
       version: v1alpha1
+    - description: LightningChannel is the Schema for durable LND channel state.
+      displayName: Lightning Channel
+      kind: LightningChannel
+      name: lightningchannels.bitcoin.kiln-fired.github.io
+      version: v1alpha1
   description: A Kubernetes operator for managing the state of Bitcoin and Lightning
     nodes.
   displayName: Kiln

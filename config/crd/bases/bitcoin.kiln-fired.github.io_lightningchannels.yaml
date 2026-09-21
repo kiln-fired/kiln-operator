@@ -1,0 +1,187 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  creationTimestamp: null
+  name: lightningchannels.bitcoin.kiln-fired.github.io
+spec:
+  group: bitcoin.kiln-fired.github.io
+  names:
+    kind: LightningChannel
+    listKind: LightningChannelList
+    plural: lightningchannels
+    singular: lightningchannel
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.nodeRef
+      name: Node
+      type: string
+    - jsonPath: .spec.peerRef
+      name: Peer
+      type: string
+    - jsonPath: .spec.capacitySats
+      name: Capacity
+      type: integer
+    - jsonPath: .status.active
+      name: Active
+      type: boolean
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: LightningChannel is the Schema for durable LND channel state.
+        properties:
+          apiVersion:
+            description: APIVersion defines the versioned schema of this representation of an object.
+            type: string
+          kind:
+            description: Kind is a string value representing the REST resource this object represents.
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: LightningChannelSpec defines a desired LND channel.
+            properties:
+              capacitySats:
+                description: Local funding amount committed to the channel.
+                format: int64
+                minimum: 20000
+                type: integer
+                x-kubernetes-validations:
+                - message: capacitySats is immutable
+                  rule: self == oldSelf
+              minConfs:
+                default: 1
+                description: MinConfs is the minimum confirmation count required for wallet inputs.
+                format: int32
+                minimum: 0
+                type: integer
+                x-kubernetes-validations:
+                - message: minConfs is immutable
+                  rule: self == oldSelf
+              nodeRef:
+                description: Name of the local LightningNode in the same namespace.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: nodeRef is immutable
+                  rule: self == oldSelf
+              peerRef:
+                description: Name of the LightningPeer that identifies the remote node.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: peerRef is immutable
+                  rule: self == oldSelf
+              private:
+                default: false
+                description: Private controls whether the channel is announced to the public graph.
+                type: boolean
+                x-kubernetes-validations:
+                - message: private is immutable
+                  rule: self == oldSelf
+              safety:
+                description: Safety policy for network-sensitive behavior.
+                properties:
+                  allowMainnet:
+                    default: false
+                    description: AllowMainnet must be explicitly set to true before Kiln will start a mainnet node.
+                    type: boolean
+                type: object
+              spendUnconfirmed:
+                default: false
+                description: SpendUnconfirmed allows unconfirmed wallet outputs to fund the channel.
+                type: boolean
+                x-kubernetes-validations:
+                - message: spendUnconfirmed is immutable
+                  rule: self == oldSelf
+            required:
+            - capacitySats
+            - nodeRef
+            - peerRef
+            type: object
+          status:
+            description: LightningChannelStatus describes the observed LND channel.
+            properties:
+              active:
+                description: Active reports whether LND currently considers the channel active.
+                type: boolean
+              capacitySats:
+                description: CapacitySats is the observed channel capacity.
+                format: int64
+                type: integer
+              channelPoint:
+                description: ChannelPoint is the funding outpoint once assigned by LND.
+                type: string
+              conditions:
+                description: Conditions summarize node, peer, funding, and readiness state.
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/)?(([A-Z]([a-z0-9]*[A-Z0-9])*)|([a-z0-9]([a-z0-9]*[A-Z0-9])*))$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              localBalanceSats:
+                description: LocalBalanceSats is this node's current channel balance.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is a concise summary of channel lifecycle state.
+                type: string
+              private:
+                description: Private reports the observed channel visibility.
+                type: boolean
+              remoteBalanceSats:
+                description: RemoteBalanceSats is the remote node's current channel balance.
+                format: int64
+                type: integer
+              remotePubkey:
+                description: RemotePubkey is the resolved LightningPeer identity.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -112,6 +112,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.LightningChannelReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LightningChannel")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.SeedReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

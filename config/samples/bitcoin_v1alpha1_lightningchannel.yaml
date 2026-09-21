@@ -1,0 +1,10 @@
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: LightningChannel
+metadata:
+  name: alice-to-bob
+spec:
+  nodeRef: lnd
+  peerRef: bob
+  capacitySats: 100000
+  private: true
+  minConfs: 1
