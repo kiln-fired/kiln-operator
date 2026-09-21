@@ -125,6 +125,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		statefulSet.Status.Replicas = 1
 		statefulSet.Status.ReadyReplicas = 1
 		Expect(k8sClient.Status().Update(ctx, statefulSet)).To(Succeed())
 		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
