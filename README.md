@@ -186,7 +186,7 @@ Peer reconciliation uses a separate LightningNode-owned internal credential Secr
 
 ## Declarative Lightning channels
 
-`LightningChannel` represents a channel that should exist between a local `LightningNode` and a declared `LightningPeer`.
+`LightningChannel` represents a channel that should exist through a declared `LightningPeer`. The peer is the channel's immediate dependency and identifies the local `LightningNode`.
 
 ```yaml
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
@@ -194,7 +194,6 @@ kind: LightningChannel
 metadata:
   name: alice-to-bob
 spec:
-  nodeRef: lnd
   peerRef: bob
   capacitySats: 100000
   private: true
@@ -209,8 +208,8 @@ Kiln does not adopt unrelated channels merely because they have the same peer or
 
 Channel creation waits for:
 
-- the referenced `LightningNode` to be ready and synchronized to Bitcoin
 - the referenced `LightningPeer` to be connected and ready
+- the peer's `LightningNode` dependency to remain usable and synchronized to Bitcoin
 - internal LND operator credentials to be available
 - explicit `safety.allowMainnet: true` on a mainnet `LightningChannel`
 

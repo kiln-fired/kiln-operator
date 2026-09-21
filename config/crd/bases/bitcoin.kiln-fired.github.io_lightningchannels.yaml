@@ -16,9 +16,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.nodeRef
-      name: Node
-      type: string
     - jsonPath: .spec.peerRef
       name: Peer
       type: string
@@ -64,12 +61,6 @@ spec:
                 x-kubernetes-validations:
                 - message: minConfs is immutable
                   rule: self == oldSelf
-              nodeRef:
-                description: Name of the local LightningNode in the same namespace.
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: nodeRef is immutable
                   rule: self == oldSelf
               peerRef:
                 description: Name of the LightningPeer that identifies the remote node.
@@ -102,7 +93,6 @@ spec:
                   rule: self == oldSelf
             required:
             - capacitySats
-            - nodeRef
             - peerRef
             type: object
           status:

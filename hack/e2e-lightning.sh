@@ -392,7 +392,6 @@ metadata:
   name: alice-to-bob
   namespace: $NAMESPACE
 spec:
-  nodeRef: $LIGHTNING_NODE
   peerRef: bob
   capacitySats: 100000
   private: true
