@@ -9,7 +9,7 @@ COPY go.mod go.mod
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
+    go mod download all
 
 # Copy the go source
 COPY main.go main.go
@@ -23,6 +23,7 @@ COPY controllers/ controllers/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
+    go mod verify && \
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
     go build -o manager main.go
 
