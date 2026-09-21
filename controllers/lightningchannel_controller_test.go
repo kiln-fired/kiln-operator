@@ -30,6 +30,16 @@ var _ = Describe("LightningChannel controller", func() {
 	createDependencies := func(network string) (*bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer) {
 		node := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: namespace},
+			Spec: bitcoinv1alpha1.LightningNodeSpec{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{External: &bitcoinv1alpha1.ExternalBitcoinConnection{
+					Host:                 "btcd",
+					Network:              network,
+					CertSecret:           "btcd-rpc-tls",
+					ApiAuthSecretName:    "btcd-rpc-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
+				}},
+			},
 		}
 		Expect(k8sClient.Create(ctx, node)).To(Succeed())
 		node.Status.Network = network
@@ -73,7 +83,6 @@ var _ = Describe("LightningChannel controller", func() {
 		channel := &bitcoinv1alpha1.LightningChannel{
 			ObjectMeta: metav1.ObjectMeta{Name: channelName, Namespace: namespace},
 			Spec: bitcoinv1alpha1.LightningChannelSpec{
-				NodeRef:      nodeName,
 				PeerRef:      peerName,
 				CapacitySats: 100000,
 				Private:      true,
@@ -174,6 +183,68 @@ var _ = Describe("LightningChannel controller", func() {
 		Expect(found.Status.ChannelPoint).To(Equal("def456:1"))
 		Expect(found.Status.LocalBalanceSats).To(Equal(int64(95000)))
 		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
+	})
+
+	It("keeps observing an existing channel while chain sync is transiently false", func() {
+		node, _ := createDependencies("simnet")
+		node.Status.Runtime.SyncedToChain = false
+		Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+		createChannel(false)
+
+		openCalls := 0
+		reconciler := LightningChannelReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			ObserveChannel: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningChannel, *corev1.Secret) (*LightningChannelObservation, error) {
+				return &LightningChannelObservation{
+					State: "Open", ChannelPoint: "steady:0", RemotePubkey: pubkey,
+					Active: true, CapacitySats: 100000, LocalBalanceSats: 99000,
+				}, nil
+			},
+			OpenChannel: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningChannel, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) (*LightningChannelOpenResult, error) {
+				openCalls++
+				return nil, nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: channelKey})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(openCalls).To(BeZero())
+
+		found := &bitcoinv1alpha1.LightningChannel{}
+		Expect(k8sClient.Get(ctx, channelKey, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("Open"))
+		Expect(found.Status.Active).To(BeTrue())
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
+	})
+
+	It("does not fund a missing channel while chain sync is false", func() {
+		node, _ := createDependencies("simnet")
+		node.Status.Runtime.SyncedToChain = false
+		Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+		createChannel(false)
+
+		openCalls := 0
+		reconciler := LightningChannelReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			ObserveChannel: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningChannel, *corev1.Secret) (*LightningChannelObservation, error) {
+				return &LightningChannelObservation{State: "Missing"}, nil
+			},
+			OpenChannel: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningChannel, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) (*LightningChannelOpenResult, error) {
+				openCalls++
+				return nil, nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: channelKey})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(openCalls).To(BeZero())
+
+		found := &bitcoinv1alpha1.LightningChannel{}
+		Expect(k8sClient.Get(ctx, channelKey, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("WaitingForDependency"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Reason).To(Equal("LightningNodeChainNotSynced"))
 	})
 
 	It("waits for a connected LightningPeer before funding", func() {

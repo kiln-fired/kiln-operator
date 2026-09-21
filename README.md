@@ -16,7 +16,7 @@ The current implementation is intentionally focused rather than generic:
 Kiln currently optimizes for one thing: making a Bitcoin-backed LND node behave predictably under normal Kubernetes operations such as pod replacement, controller restart, rescheduling, and custom-resource deletion/recreation.
 
 > [!IMPORTANT]
-> Kiln is still under active development. The current work has concentrated on lifecycle safety and recovery. Mainnet requires explicit opt-in. Automated backups, seed custody, and declarative payment/channel APIs are not yet part of the supported contract.
+> Kiln is still under active development. The current work has concentrated on lifecycle safety and recovery. Mainnet requires explicit opt-in. Automated backups, stronger seed custody, and application-level payment or invoice APIs are not yet part of the supported contract.
 
 ## What Kiln manages
 
@@ -100,7 +100,7 @@ This matters because Kiln publishes that certificate as client trust material.
 
 ## Network and mainnet safety
 
-Kiln defaults both Bitcoin and Lightning resources to `simnet`.
+`BitcoinNode` defaults to `simnet`. A managed `LightningNode` does not declare a second network value: it derives the network from its referenced `BitcoinNode`. An externally managed Bitcoin backend declares the network under `bitcoinConnection.external`.
 
 Supported network values are:
 
@@ -121,18 +121,17 @@ spec:
     allowMainnet: true
 ```
 
-For a `LightningNode`, the network remains under `bitcoinConnection`:
+For a managed `LightningNode`, the network is derived from its referenced `BitcoinNode`:
 
 ```yaml
 spec:
   bitcoinConnection:
     nodeRef: bitcoin-mainnet
-    network: mainnet
   safety:
     allowMainnet: true
 ```
 
-A referenced `BitcoinNode` and `LightningNode` must resolve to the same network. Kiln reports `NetworkReady=False` with reason `NetworkMismatch` and refuses to run LND when they differ.
+An external Bitcoin backend declares its network explicitly under `bitcoinConnection.external`. Once a Lightning wallet has resolved a network, Kiln refuses an in-place backend change that would move it to another network.
 
 If a running resource becomes blocked by network policy, Kiln gracefully removes its StatefulSet while retaining the PVC. Restoring a valid policy can therefore recover the same persisted node state.
 
@@ -146,7 +145,6 @@ A `LightningNode` can reference a same-namespace `BitcoinNode`:
 spec:
   bitcoinConnection:
     nodeRef: btcd
-    network: simnet
 ```
 
 When `nodeRef` is set, Kiln:
@@ -157,7 +155,45 @@ When `nodeRef` is set, Kiln:
 4. derives the btcd RPC username/password Secret references
 5. starts LND only after the dependency is usable
 
-Explicit RPC connection fields remain available for externally managed btcd nodes.
+Externally managed btcd nodes use an explicit alternative:
+
+```yaml
+spec:
+  bitcoinConnection:
+    external:
+      host: btcd.example.com:18556
+      network: signet
+      certSecret: btcd-rpc-tls
+      apiAuthSecretName: btcd-rpc-creds
+      apiUserSecretKey: username
+      apiPasswordSecretKey: password
+```
+
+Exactly one of `nodeRef` or `external` is allowed.
+
+## API reference model
+
+Kiln resources form a reference graph, not an ownership tree:
+
+```text
+BitcoinNode
+    ↑ nodeRef
+LightningNode
+    ↑ nodeRef
+LightningPeer
+    ↑ peerRef
+LightningChannel
+```
+
+References follow five rules:
+
+1. A resource references only its immediate first-class dependency.
+2. References are fixed-kind and same-namespace.
+3. References do not create Kubernetes ownership between Kiln CRs.
+4. Referenced-resource changes enqueue dependents through field indexes and watches.
+5. Deletion is blocked only when the protocol requires it. In particular, a `LightningPeer` cannot finish deletion while any `LightningChannel` still references it.
+
+Managed `LightningNode` resources derive Bitcoin network and RPC configuration from `bitcoinConnection.nodeRef`. External Bitcoin backends use the mutually exclusive `bitcoinConnection.external` form.
 
 ## Declarative Lightning peers
 
@@ -174,19 +210,21 @@ spec:
   address: peer.example.com:9735
 ```
 
-Kiln observes LND's active peer set before taking action. If the pubkey is already connected, reconciliation is satisfied and no connect request is issued. If it is absent, Kiln asks LND to establish a persistent connection and continues observing until the desired state is reached.
+Kiln observes LND's active peer set before taking action. If the pubkey is already connected, reconciliation is satisfied and no connect request is issued. If it is absent, Kiln requires the referenced Lightning node to be synchronized before asking LND to establish a persistent connection.
+
+A transient `syncedToChain=false` observation does not invalidate a peer that LND still reports as connected. Chain synchronization gates new connection side effects; it does not erase already-observed network state.
 
 `nodeRef` and `pubkey` are immutable because they define the identity of the relationship. The address can be updated and is used the next time a connection needs to be established.
 
 Status includes the observed connection address, whether the connection is inbound, and `NodeReady`, `Connected`, and `Ready` conditions.
 
-Deleting a `LightningPeer` requests a clean disconnect before its finalizer is released. LND does not allow a peer with active or pending channels to be disconnected, so deletion can remain pending until those channel dependencies are removed.
+Deleting a `LightningPeer` is explicitly blocked while any `LightningChannel` CR still references it. Once those channels are removed, Kiln requests a clean LND disconnect before releasing the peer finalizer.
 
 Peer reconciliation uses a separate LightningNode-owned internal credential Secret. The public RPC Secret remains limited to TLS, read-only, and invoice macaroons and never exposes `admin.macaroon`.
 
 ## Declarative Lightning channels
 
-`LightningChannel` represents a channel that should exist between a local `LightningNode` and a declared `LightningPeer`.
+`LightningChannel` represents a channel that should exist through a declared `LightningPeer`. The peer is the channel's immediate dependency and identifies the local `LightningNode`.
 
 ```yaml
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
@@ -194,7 +232,6 @@ kind: LightningChannel
 metadata:
   name: alice-to-bob
 spec:
-  nodeRef: lnd
   peerRef: bob
   capacitySats: 100000
   private: true
@@ -207,12 +244,14 @@ Each funding workflow is tagged inside LND with a memo derived from the `Lightni
 
 Kiln does not adopt unrelated channels merely because they have the same peer or capacity. Multiple independently managed channels to the same peer are therefore unambiguous.
 
-Channel creation waits for:
+Before funding a missing channel, Kiln requires:
 
-- the referenced `LightningNode` to be ready and synchronized to Bitcoin
 - the referenced `LightningPeer` to be connected and ready
+- the peer's `LightningNode` to be usable and synchronized to Bitcoin
 - internal LND operator credentials to be available
 - explicit `safety.allowMainnet: true` on a mainnet `LightningChannel`
+
+Once a Kiln-owned channel is pending or open, transient `syncedToChain=false` observations do not make the channel disappear from desired state. Kiln continues observing the existing channel and only uses chain synchronization as a gate for new funding side effects.
 
 Funding parameters are immutable because changing the peer, capacity, privacy, or input-confirmation policy would describe a different channel rather than an in-place update.
 
@@ -299,7 +338,7 @@ The controller exposes these conditions:
 
 | Condition | Meaning |
 | --- | --- |
-| `NetworkReady` | The selected network passes Kiln safety policy and matches the referenced Bitcoin node |
+| `NetworkReady` | The resolved Bitcoin network passes Kiln safety policy and remains compatible with the persisted Lightning wallet |
 | `BitcoinReady` | The configured Bitcoin backend is available |
 | `StorageFenced` | The Lightning volume is restricted to one pod |
 | `WalletReady` | The LND wallet is initialized/unlocked |
@@ -319,7 +358,6 @@ metadata:
 spec:
   bitcoinConnection:
     nodeRef: btcd
-    network: simnet
   rpc:
     secretName: lnd-rpc
   wallet:
@@ -349,7 +387,7 @@ The test creates a real btcd + LND stack and verifies that the same LND identity
 5. complete `LightningNode` deletion
 6. `LightningNode` recreation against the retained PVC
 
-The test also confirms that an independent client pod can authenticate to LND through the published Service/Secret before and after recovery.
+The test also confirms that an independent client pod can authenticate to LND through the published Service/Secret before and after recovery. It exercises declarative peer/channel creation, crash-safe channel rediscovery, peer deletion blocking while a channel still depends on it, cooperative channel close, and automatic resumption of the pending peer deletion afterward.
 
 The destructive E2E is intentionally not run for every repository change. It runs:
 
@@ -463,13 +501,11 @@ Implemented:
 - declarative Lightning channel lifecycle
 - crash-safe channel ownership through persisted LND memos
 - explicit network/mainnet guardrails
-- cross-resource network consistency
+- derived Lightning network identity from the referenced Bitcoin backend
 - destructive real-cluster recovery testing
 
 Next areas under consideration:
 
-- invoice lifecycle
-- payment intent only where it can be modeled safely as durable desired state
 - external backup/recovery integration
 - stronger seed custody models
 - additional Bitcoin or Lightning implementations where real requirements justify the abstraction

@@ -98,14 +98,14 @@ var _ = Describe("LightningNode controller", func() {
 		lightningNode := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
 			Spec: bitcoinv1alpha1.LightningNodeSpec{
-				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{External: &bitcoinv1alpha1.ExternalBitcoinConnection{
 					Host:                 "btcd",
 					Network:              "simnet",
 					CertSecret:           "btcd-rpc-tls",
 					ApiAuthSecretName:    "btcd-rpc-creds",
 					ApiUserSecretKey:     "username",
 					ApiPasswordSecretKey: "password",
-				},
+				}},
 				Wallet: bitcoinv1alpha1.Wallet{
 					Password: bitcoinv1alpha1.WalletPassword{SecretName: "alice-wallet", SecretKey: "password"},
 					Seed:     bitcoinv1alpha1.SeedImport{SecretName: "seed"},
@@ -240,14 +240,14 @@ var _ = Describe("LightningNode controller", func() {
 		lightningNode := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
 			Spec: bitcoinv1alpha1.LightningNodeSpec{
-				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{External: &bitcoinv1alpha1.ExternalBitcoinConnection{
 					Host:                 "btcd",
 					Network:              "simnet",
 					CertSecret:           "btcd-rpc-tls",
 					ApiAuthSecretName:    "btcd-rpc-creds",
 					ApiUserSecretKey:     "username",
 					ApiPasswordSecretKey: "password",
-				},
+				}},
 				Wallet: bitcoinv1alpha1.Wallet{
 					Password: bitcoinv1alpha1.WalletPassword{SecretName: "wallet", SecretKey: "password"},
 					Seed:     bitcoinv1alpha1.SeedImport{SecretName: "seed"},
@@ -286,7 +286,7 @@ var _ = Describe("LightningNode controller", func() {
 		lightningNode := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
 			Spec: bitcoinv1alpha1.LightningNodeSpec{
-				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{NodeRef: "bitcoin", Network: "simnet"},
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{NodeRef: "bitcoin"},
 				Wallet: bitcoinv1alpha1.Wallet{
 					Password: bitcoinv1alpha1.WalletPassword{SecretName: "wallet", SecretKey: "password"},
 					Seed:     bitcoinv1alpha1.SeedImport{SecretName: "seed"},
@@ -322,14 +322,14 @@ var _ = Describe("LightningNode controller", func() {
 		lightningNode := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
 			Spec: bitcoinv1alpha1.LightningNodeSpec{
-				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{External: &bitcoinv1alpha1.ExternalBitcoinConnection{
 					Host:                 "btcd",
 					Network:              "mainnet",
 					CertSecret:           "btcd-rpc-tls",
 					ApiAuthSecretName:    "btcd-rpc-creds",
 					ApiUserSecretKey:     "username",
 					ApiPasswordSecretKey: "password",
-				},
+				}},
 			},
 		}
 		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())
@@ -348,10 +348,18 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
 
-	It("blocks a LightningNode whose network does not match its BitcoinNode", func() {
+	It("derives the Lightning network from its referenced BitcoinNode", func() {
 		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
-			ObjectMeta: metav1.ObjectMeta{Name: "bitcoin-mismatch", Namespace: Namespace},
-			Spec: bitcoinv1alpha1.BitcoinNodeSpec{Network: "testnet"},
+			ObjectMeta: metav1.ObjectMeta{Name: "bitcoin-testnet", Namespace: Namespace},
+			Spec: bitcoinv1alpha1.BitcoinNodeSpec{
+				Network: "testnet",
+				RPCServer: bitcoinv1alpha1.RPCServer{
+					CertSecret:           "bitcoin-testnet-tls",
+					ApiAuthSecretName:    "bitcoin-testnet-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
+				},
+			},
 		}
 		Expect(k8sClient.Create(ctx, bitcoinNode)).To(Succeed())
 		bitcoinNode.Status.Network = "testnet"
@@ -364,7 +372,11 @@ var _ = Describe("LightningNode controller", func() {
 		lightningNode := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
 			Spec: bitcoinv1alpha1.LightningNodeSpec{
-				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{NodeRef: "bitcoin-mismatch", Network: "simnet"},
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{NodeRef: "bitcoin-testnet"},
+				Wallet: bitcoinv1alpha1.Wallet{
+					Password: bitcoinv1alpha1.WalletPassword{SecretName: "wallet", SecretKey: "password"},
+					Seed:     bitcoinv1alpha1.SeedImport{SecretName: "seed"},
+				},
 			},
 		}
 		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())
@@ -373,13 +385,12 @@ var _ = Describe("LightningNode controller", func() {
 
 		found := &bitcoinv1alpha1.LightningNode{}
 		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, found)).To(Succeed())
-		Expect(found.Status.Phase).To(Equal("NetworkBlocked"))
-		Expect(meta.FindStatusCondition(found.Status.Conditions, "NetworkReady").Reason).To(Equal("NetworkMismatch"))
-		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Reason).To(Equal("NetworkMismatch"))
+		Expect(found.Status.Network).To(Equal("testnet"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "BitcoinReady").Reason).To(Equal("BitcoinNodeReady"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "NetworkReady").Status).To(Equal(metav1.ConditionTrue))
 
 		statefulSet := &appsv1.StatefulSet{}
-		err = k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)
-		Expect(errors.IsNotFound(err)).To(BeTrue())
+		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
 	})
 
 })

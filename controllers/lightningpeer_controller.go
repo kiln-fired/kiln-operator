@@ -31,12 +31,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	bitcoinv1alpha1 "github.com/kiln-fired/kiln-operator/api/v1alpha1"
 )
 
-const lightningPeerFinalizer = "bitcoin.kiln-fired.github.io/peer-disconnect"
+const (
+	lightningPeerFinalizer    = "bitcoin.kiln-fired.github.io/peer-disconnect"
+	lightningPeerNodeRefIndex = "spec.nodeRef"
+)
 
 type LightningPeerObservation struct {
 	Connected bool
@@ -137,6 +141,29 @@ func (r *LightningPeerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	if !node.Status.Runtime.SyncedToChain {
+		peer.Status.Phase = "WaitingForNode"
+		peer.Status.Connected = false
+		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
+			Type:               "Connected",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LightningNodeChainNotSynced",
+			Message:            "Peer is absent and LND chain synchronization is not complete",
+			ObservedGeneration: peer.Generation,
+		})
+		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LightningNodeChainNotSynced",
+			Message:            "Waiting for LND chain synchronization before connecting the peer",
+			ObservedGeneration: peer.Generation,
+		})
+		if err := r.Status().Update(ctx, peer); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	connect := r.ConnectPeer
 	if connect == nil {
 		connect = connectLightningPeer
@@ -233,26 +260,6 @@ func (r *LightningPeerReconciler) resolveLightningPeerNode(ctx context.Context, 
 		return node, nil, false, nil
 	}
 
-	if !node.Status.Runtime.SyncedToChain {
-		peer.Status.Phase = "WaitingForNode"
-		peer.Status.Connected = false
-		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
-			Type:               "NodeReady",
-			Status:             metav1.ConditionFalse,
-			Reason:             "LightningNodeChainNotSynced",
-			Message:            "Referenced LightningNode has not synchronized to its Bitcoin chain",
-			ObservedGeneration: peer.Generation,
-		})
-		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionFalse,
-			Reason:             "LightningNodeChainNotSynced",
-			Message:            "Peer reconciliation is waiting for LND chain synchronization",
-			ObservedGeneration: peer.Generation,
-		})
-		return node, nil, false, nil
-	}
-
 	secret := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: lightningOperatorRPCSecretName(node), Namespace: node.Namespace}, secret)
 	if err != nil {
@@ -301,6 +308,29 @@ func (r *LightningPeerReconciler) resolveLightningPeerNode(ctx context.Context, 
 func (r *LightningPeerReconciler) finalizeLightningPeer(ctx context.Context, peer *bitcoinv1alpha1.LightningPeer) (ctrl.Result, error) {
 	if !containsString(peer.Finalizers, lightningPeerFinalizer) {
 		return ctrl.Result{}, nil
+	}
+
+	var channels bitcoinv1alpha1.LightningChannelList
+	if err := r.List(ctx, &channels, client.InNamespace(peer.Namespace)); err != nil {
+		return ctrl.Result{}, err
+	}
+	dependents := 0
+	for i := range channels.Items {
+		if channels.Items[i].Spec.PeerRef == peer.Name {
+			dependents++
+		}
+	}
+	if dependents > 0 {
+		peer.Status.Phase = "DependencyBlocked"
+		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "ChannelsExist",
+			Message:            fmt.Sprintf("%d LightningChannel resource(s) still reference this peer", dependents),
+			ObservedGeneration: peer.Generation,
+		})
+		_ = r.Status().Update(ctx, peer)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	node := &bitcoinv1alpha1.LightningNode{}
@@ -466,8 +496,47 @@ func doLNDOperatorRequest(ctx context.Context, node *bitcoinv1alpha1.LightningNo
 	return nil
 }
 
+func (r *LightningPeerReconciler) mapLightningChannelToPeer(_ context.Context, obj client.Object) []ctrl.Request {
+	channel := obj.(*bitcoinv1alpha1.LightningChannel)
+	if channel.Spec.PeerRef == "" {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: types.NamespacedName{
+		Namespace: channel.Namespace,
+		Name:      channel.Spec.PeerRef,
+	}}}
+}
+
+func (r *LightningPeerReconciler) mapLightningNodeToPeers(ctx context.Context, obj client.Object) []ctrl.Request {
+	var peers bitcoinv1alpha1.LightningPeerList
+	if err := r.List(ctx, &peers,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{lightningPeerNodeRefIndex: obj.GetName()},
+	); err != nil {
+		ctrllog.FromContext(ctx).Error(err, "unable to map LightningNode to LightningPeers")
+		return nil
+	}
+	requests := make([]ctrl.Request, 0, len(peers.Items))
+	for i := range peers.Items {
+		requests = append(requests, ctrl.Request{NamespacedName: types.NamespacedName{
+			Namespace: peers.Items[i].Namespace,
+			Name:      peers.Items[i].Name,
+		}})
+	}
+	return requests
+}
+
 func (r *LightningPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bitcoinv1alpha1.LightningPeer{}, lightningPeerNodeRefIndex, func(obj client.Object) []string {
+		peer := obj.(*bitcoinv1alpha1.LightningPeer)
+		return []string{peer.Spec.NodeRef}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bitcoinv1alpha1.LightningPeer{}).
+		Watches(&bitcoinv1alpha1.LightningNode{}, handler.EnqueueRequestsFromMapFunc(r.mapLightningNodeToPeers)).
+		Watches(&bitcoinv1alpha1.LightningChannel{}, handler.EnqueueRequestsFromMapFunc(r.mapLightningChannelToPeer)).
 		Complete(r)
 }

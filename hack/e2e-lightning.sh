@@ -79,7 +79,6 @@ metadata:
 spec:
   bitcoinConnection:
     nodeRef: $BITCOIN_NODE
-    network: simnet
   rpc:
     secretName: lnd-rpc
   wallet:
@@ -207,8 +206,6 @@ kubectl apply -f "$tmpdir/mainnet-blocked-bitcoin.yaml"
 wait_for_condition_status bitcoinnode blocked-mainnet-bitcoin NetworkReady False
 assert_no_statefulset blocked-mainnet-bitcoin
 [[ "$(kubectl get bitcoinnode -n "$NAMESPACE" blocked-mainnet-bitcoin -o jsonpath='{.status.network}')" == "mainnet" ]]
-kubectl delete -f "$tmpdir/mainnet-blocked-bitcoin.yaml" --wait=true --timeout=60s
-
 cat >"$tmpdir/mainnet-blocked-lightning.yaml" <<EOF
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: LightningNode
@@ -217,13 +214,20 @@ metadata:
   namespace: $NAMESPACE
 spec:
   bitcoinConnection:
-    network: mainnet
+    external:
+      host: example.invalid:18556
+      network: mainnet
+      certSecret: unused-tls
+      apiAuthSecretName: unused-auth
+      apiUserSecretKey: username
+      apiPasswordSecretKey: password
 EOF
 kubectl apply -f "$tmpdir/mainnet-blocked-lightning.yaml"
 wait_for_condition_status lightningnode blocked-mainnet-lightning NetworkReady False
 assert_no_statefulset blocked-mainnet-lightning
 [[ "$(kubectl get lightningnode -n "$NAMESPACE" blocked-mainnet-lightning -o jsonpath='{.status.network}')" == "mainnet" ]]
 kubectl delete -f "$tmpdir/mainnet-blocked-lightning.yaml" --wait=true --timeout=60s
+kubectl delete -f "$tmpdir/mainnet-blocked-bitcoin.yaml" --wait=true --timeout=60s
 
 openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_NODE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_NODE,DNS:$BITCOIN_NODE.$NAMESPACE.svc,DNS:$BITCOIN_NODE.$NAMESPACE.svc.cluster.local"
 
@@ -279,22 +283,6 @@ kubectl wait -n "$NAMESPACE" bitcoinnode/"$BITCOIN_NODE" --for=condition=Ready -
 [[ "$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.network}')" == "simnet" ]]
 [[ "$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')" -ge 1 ]]
 
-cat >"$tmpdir/network-mismatch-lightning.yaml" <<EOF
-apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
-kind: LightningNode
-metadata:
-  name: mismatched-lightning
-  namespace: $NAMESPACE
-spec:
-  bitcoinConnection:
-    nodeRef: $BITCOIN_NODE
-    network: testnet
-EOF
-kubectl apply -f "$tmpdir/network-mismatch-lightning.yaml"
-wait_for_condition_status lightningnode mismatched-lightning NetworkReady False
-assert_no_statefulset mismatched-lightning
-kubectl delete -f "$tmpdir/network-mismatch-lightning.yaml" --wait=true --timeout=60s
-
 kubectl apply -f "$tmpdir/lightning.yaml"
 kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=240s
 wait_for_secret_keys lnd-rpc
@@ -304,6 +292,14 @@ alice_address="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --   ln
 
 echo "Funding Alice's simnet wallet"
 mine_to_address 301 "$alice_address"
+
+# A large instantaneous simnet bootstrap can leave LND at the correct tip while
+# GetInfo still reports synced_to_chain=false. Restart LND against the now-stable
+# chain and require a fresh wallet sync before any peer/channel reconciliation.
+echo "Restarting Alice LND after initial simnet bootstrap"
+kubectl delete pod -n "$NAMESPACE" "$LIGHTNING_NODE-0" --wait=true
+kubectl wait -n "$NAMESPACE" pod/"$LIGHTNING_NODE-0" --for=condition=Ready --timeout=180s
+kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=180s
 wait_for_lightning_sync "$LIGHTNING_NODE"
 
 bitcoin_height="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')"
@@ -336,7 +332,6 @@ metadata:
 spec:
   bitcoinConnection:
     nodeRef: $BITCOIN_NODE
-    network: simnet
   rpc:
     secretName: bob-rpc
   wallet:
@@ -392,7 +387,6 @@ metadata:
   name: alice-to-bob
   namespace: $NAMESPACE
 spec:
-  nodeRef: $LIGHTNING_NODE
   peerRef: bob
   capacitySats: 100000
   private: true
@@ -413,8 +407,6 @@ done
 
 echo "Confirming channel funding transaction"
 mine_to_address 6 "$alice_address"
-wait_for_lightning_sync "$LIGHTNING_NODE"
-wait_for_lightning_sync "$SECOND_LIGHTNING_NODE"
 kubectl wait -n "$NAMESPACE" lightningchannel/alice-to-bob --for=condition=Ready --timeout=180s
 
 channel_point_before="$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.channelPoint}')"
@@ -438,6 +430,15 @@ peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=sim
 channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
 [[ "$channel_count" == "1" ]]
 
+echo "Verifying LightningPeer deletion is blocked by the channel dependency"
+kubectl delete -f "$tmpdir/peer.yaml" --wait=false
+for i in {1..60}; do
+  peer_phase="$(kubectl get lightningpeer -n "$NAMESPACE" bob -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  [[ "$peer_phase" == "DependencyBlocked" ]] && break
+  sleep 1
+done
+[[ "$peer_phase" == "DependencyBlocked" ]]
+
 echo "Deleting LightningChannel and verifying cooperative close"
 kubectl delete -f "$tmpdir/channel.yaml" --wait=false
 for i in {1..60}; do
@@ -448,15 +449,13 @@ done
 [[ "$channel_phase" == "Closing" ]]
 
 mine_to_address 6 "$alice_address"
-wait_for_lightning_sync "$LIGHTNING_NODE"
-wait_for_lightning_sync "$SECOND_LIGHTNING_NODE"
 kubectl wait -n "$NAMESPACE" --for=delete lightningchannel/alice-to-bob --timeout=180s
 
 channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
 [[ "$channel_count" == "0" ]]
 
-echo "Deleting LightningPeer and verifying finalizer-driven disconnect"
-kubectl delete -f "$tmpdir/peer.yaml" --wait=true --timeout=120s
+echo "Waiting for blocked LightningPeer deletion to resume after channel removal"
+kubectl wait -n "$NAMESPACE" --for=delete lightningpeer/bob --timeout=120s
 for i in {1..60}; do
   peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
   [[ -z "$peer_pubkey" ]] && break

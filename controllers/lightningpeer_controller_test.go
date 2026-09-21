@@ -30,6 +30,16 @@ var _ = Describe("LightningPeer controller", func() {
 	createReadyNode := func() *bitcoinv1alpha1.LightningNode {
 		node := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: namespace},
+			Spec: bitcoinv1alpha1.LightningNodeSpec{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{External: &bitcoinv1alpha1.ExternalBitcoinConnection{
+					Host:                 "btcd",
+					Network:              "simnet",
+					CertSecret:           "btcd-rpc-tls",
+					ApiAuthSecretName:    "btcd-rpc-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
+				}},
+			},
 		}
 		Expect(k8sClient.Create(ctx, node)).To(Succeed())
 		node.Status.Phase = "Ready"
@@ -197,6 +207,74 @@ var _ = Describe("LightningPeer controller", func() {
 			return errors.IsNotFound(err)
 		}, 10*time.Second, 100*time.Millisecond).Should(BeTrue())
 	})
+	It("blocks peer deletion while a LightningChannel still references it", func() {
+		createReadyNode()
+		peer := createPeer()
+		peer.Finalizers = []string{lightningPeerFinalizer}
+		Expect(k8sClient.Update(ctx, peer)).To(Succeed())
+
+		channel := &bitcoinv1alpha1.LightningChannel{
+			ObjectMeta: metav1.ObjectMeta{Name: "channel-to-bob", Namespace: namespace},
+			Spec: bitcoinv1alpha1.LightningChannelSpec{
+				PeerRef:      peerName,
+				CapacitySats: 100000,
+			},
+		}
+		Expect(k8sClient.Create(ctx, channel)).To(Succeed())
+
+		disconnectCalls := 0
+		reconciler := LightningPeerReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			DisconnectPeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) error {
+				disconnectCalls++
+				return nil
+			},
+		}
+
+		Expect(k8sClient.Delete(ctx, peer)).To(Succeed())
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: peerKey})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(disconnectCalls).To(BeZero())
+
+		found := &bitcoinv1alpha1.LightningPeer{}
+		Expect(k8sClient.Get(ctx, peerKey, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("DependencyBlocked"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Reason).To(Equal("ChannelsExist"))
+
+		Expect(k8sClient.Delete(ctx, channel)).To(Succeed())
+	})
+
+	It("keeps an already-connected peer ready while chain sync is transiently false", func() {
+		node := createReadyNode()
+		node.Status.Runtime.SyncedToChain = false
+		Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+		createPeer()
+
+		connectCalls := 0
+		reconciler := LightningPeerReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			ObservePeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) (*LightningPeerObservation, error) {
+				return &LightningPeerObservation{Connected: true, Address: address}, nil
+			},
+			ConnectPeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) error {
+				connectCalls++
+				return nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: peerKey})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(connectCalls).To(BeZero())
+
+		found := &bitcoinv1alpha1.LightningPeer{}
+		Expect(k8sClient.Get(ctx, peerKey, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("Connected"))
+		Expect(found.Status.Connected).To(BeTrue())
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
+	})
+
 	It("waits for chain sync before attempting a peer connection", func() {
 		node := createReadyNode()
 		node.Status.Runtime.SyncedToChain = false
@@ -207,6 +285,9 @@ var _ = Describe("LightningPeer controller", func() {
 		reconciler := LightningPeerReconciler{
 			Client: k8sClient,
 			Scheme: k8sClient.Scheme(),
+			ObservePeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) (*LightningPeerObservation, error) {
+				return &LightningPeerObservation{Connected: false}, nil
+			},
 			ConnectPeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) error {
 				connectCalls++
 				return nil
@@ -220,7 +301,8 @@ var _ = Describe("LightningPeer controller", func() {
 		found := &bitcoinv1alpha1.LightningPeer{}
 		Expect(k8sClient.Get(ctx, peerKey, found)).To(Succeed())
 		Expect(found.Status.Phase).To(Equal("WaitingForNode"))
-		Expect(meta.FindStatusCondition(found.Status.Conditions, "NodeReady").Reason).To(Equal("LightningNodeChainNotSynced"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "NodeReady").Status).To(Equal(metav1.ConditionTrue))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Reason).To(Equal("LightningNodeChainNotSynced"))
 	})
 
 })
