@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -50,7 +51,8 @@ type LightningNodeReconciler struct {
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes/finalizers,verbs=update
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes,verbs=get;list;watch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=services;secrets,verbs=get;list;watch
+//+kubebuilder:rbac:groups=core,resources=services;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles;rolebindings,verbs=get;list;watch;create;update;patch;delete
 
 func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
@@ -107,6 +109,12 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
+
+	if err := r.ensureRPCPublishingResources(ctx, lightningNode); err != nil {
+		return ctrl.Result{}, err
+	}
+	lightningNode.Status.RPCSecretName = lightningRPCSecretName(lightningNode)
+	lightningNode.Status.RPCAddress = lightningNode.Name + "." + lightningNode.Namespace + ".svc.cluster.local:10009"
 
 	foundStatefulSet := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: lightningNode.Name, Namespace: lightningNode.Namespace}, foundStatefulSet)
@@ -174,7 +182,43 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
+	rpcSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: lightningRPCSecretName(lightningNode), Namespace: lightningNode.Namespace}, rpcSecret); err != nil {
+		return ctrl.Result{}, err
+	}
+	credentialsReady := len(rpcSecret.Data["tls.cert"]) > 0 &&
+		len(rpcSecret.Data["readonly.macaroon"]) > 0 &&
+		len(rpcSecret.Data["invoice.macaroon"]) > 0
+	if !credentialsReady {
+		lightningNode.Status.Phase = "PublishingCredentials"
+		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+			Type:               "CredentialsReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             "CredentialsPending",
+			Message:            "Waiting for LND TLS and restricted macaroons to be published",
+			ObservedGeneration: lightningNode.Generation,
+		})
+		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "CredentialsPending",
+			Message:            "LND is running but client credentials are not yet available",
+			ObservedGeneration: lightningNode.Generation,
+		})
+		if err := r.Status().Update(ctx, lightningNode); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	lightningNode.Status.Phase = "Ready"
+	meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+		Type:               "CredentialsReady",
+		Status:             metav1.ConditionTrue,
+		Reason:             "Published",
+		Message:            "LND TLS certificate and restricted macaroons are available",
+		ObservedGeneration: lightningNode.Generation,
+	})
 	meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
 		Type:               "WalletReady",
 		Status:             metav1.ConditionTrue,
@@ -266,6 +310,111 @@ func (r *LightningNodeReconciler) resolveBitcoinConnection(ctx context.Context, 
 	return connection, true, nil
 }
 
+func lightningRPCSecretName(l *bitcoinv1alpha1.LightningNode) string {
+	if l.Spec.RPC.SecretName != "" {
+		return l.Spec.RPC.SecretName
+	}
+	return derivedLightningName(l.Name, "-rpc")
+}
+
+func lightningRPCPublisherName(l *bitcoinv1alpha1.LightningNode) string {
+	return derivedLightningName(l.Name, "-rpc-publisher")
+}
+
+func derivedLightningName(name, suffix string) string {
+	const maxNameLength = 253
+	if len(name)+len(suffix) <= maxNameLength {
+		return name + suffix
+	}
+	return name[:maxNameLength-len(suffix)] + suffix
+}
+
+func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Context, l *bitcoinv1alpha1.LightningNode) error {
+	secretName := lightningRPCSecretName(l)
+	publisherName := lightningRPCPublisherName(l)
+
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: l.Namespace}, secret)
+	if errors.IsNotFound(err) {
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: l.Namespace, Labels: labelsForLightningNode(l.Name)},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		if err := ctrl.SetControllerReference(l, secret, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, secret); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	serviceAccount := &corev1.ServiceAccount{}
+	err = r.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: l.Namespace}, serviceAccount)
+	if errors.IsNotFound(err) {
+		serviceAccount = &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: publisherName, Namespace: l.Namespace}}
+		if err := ctrl.SetControllerReference(l, serviceAccount, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, serviceAccount); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	role := &rbacv1.Role{}
+	err = r.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: l.Namespace}, role)
+	if errors.IsNotFound(err) {
+		role = &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{Name: publisherName, Namespace: l.Namespace},
+			Rules: []rbacv1.PolicyRule{{
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{secretName},
+				Verbs:         []string{"get", "update", "patch"},
+			}},
+		}
+		if err := ctrl.SetControllerReference(l, role, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, role); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	roleBinding := &rbacv1.RoleBinding{}
+	err = r.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: l.Namespace}, roleBinding)
+	if errors.IsNotFound(err) {
+		roleBinding = &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: publisherName, Namespace: l.Namespace},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: rbacv1.GroupName,
+				Kind:     "Role",
+				Name:     publisherName,
+			},
+			Subjects: []rbacv1.Subject{{
+				Kind:      "ServiceAccount",
+				Name:      publisherName,
+				Namespace: l.Namespace,
+			}},
+		}
+		if err := ctrl.SetControllerReference(l, roleBinding, r.Scheme); err != nil {
+			return err
+		}
+		if err := r.Create(ctx, roleBinding); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1.LightningNode, connection bitcoinv1alpha1.BitcoinConnection) *appsv1.StatefulSet {
 	ls := labelsForLightningNode(l.Name)
 	size := int32(1)
@@ -290,6 +439,8 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 	if network == "" {
 		network = "simnet"
 	}
+	publisherName := lightningRPCPublisherName(l)
+	rpcSecretName := lightningRPCSecretName(l)
 
 	lnd := corev1.Container{
 		Image:   lndImage,
@@ -362,6 +513,38 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 		},
 	}
 
+	publisher := corev1.Container{
+		Image:   lndInitImage,
+		Name:    "rpc-credential-publisher",
+		Command: []string{"/bin/sh", "-c"},
+		Args: []string{`
+while true; do
+  CERT=/data/tls.cert
+  READONLY=/data/data/chain/bitcoin/$NETWORK/readonly.macaroon
+  INVOICE=/data/data/chain/bitcoin/$NETWORK/invoice.macaroon
+  if [ -s "$CERT" ] && [ -s "$READONLY" ] && [ -s "$INVOICE" ]; then
+    lndinit -v store-secret --batch --overwrite --target=k8s       --k8s.namespace="$POD_NAMESPACE"       --k8s.secret-name="$RPC_SECRET_NAME"       "$CERT" "$READONLY" "$INVOICE"
+  fi
+  sleep 30
+done
+`},
+		Env: []corev1.EnvVar{
+			{Name: "NETWORK", Value: network},
+			{Name: "RPC_SECRET_NAME", Value: rpcSecretName},
+			{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			Privileged:               ptr.To(false),
+			RunAsNonRoot:             ptr.To(true),
+			RunAsUser:                ptr.To(int64(65532)),
+			RunAsGroup:               ptr.To(int64(65532)),
+			AllowPrivilegeEscalation: ptr.To(false),
+			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+		},
+		VolumeMounts: []corev1.VolumeMount{{Name: "lnd-data", MountPath: "/data", ReadOnly: true}},
+	}
+
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: l.Name, Namespace: l.Namespace},
 		Spec: appsv1.StatefulSetSpec{
@@ -379,6 +562,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 				ObjectMeta: metav1.ObjectMeta{Labels: ls},
 				Spec: corev1.PodSpec{
 					TerminationGracePeriodSeconds: ptr.To(int64(60)),
+					ServiceAccountName:            publisherName,
 					SecurityContext: &corev1.PodSecurityContext{
 						FSGroup: ptr.To(int64(65532)),
 					},
@@ -416,7 +600,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 							{Name: "wallet-password", MountPath: "/secret/wallet-password", SubPath: l.Spec.Wallet.Password.SecretKey, ReadOnly: true},
 						},
 					}},
-					Containers: []corev1.Container{lnd},
+					Containers: []corev1.Container{lnd, publisher},
 					Volumes: []corev1.Volume{
 						{
 							Name: "rpc-cert",
@@ -515,5 +699,9 @@ func (r *LightningNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&bitcoinv1alpha1.LightningNode{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
+		Owns(&corev1.Secret{}).
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&rbacv1.Role{}).
+		Owns(&rbacv1.RoleBinding{}).
 		Complete(r)
 }
