@@ -33,6 +33,9 @@ jobs:
           kubectl get nodes
           kubectl get storageclass
 
+      - name: normalize go modules
+        run: go mod tidy
+
       - name: build and load images
         run: |
           docker build -t kiln-operator:e2e .
