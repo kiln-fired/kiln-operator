@@ -18,7 +18,13 @@ package controllers
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -45,6 +51,7 @@ const lightningNodeFinalizer = "bitcoin.kiln-fired.github.io/lightning-stateful-
 type LightningNodeReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	GetInfo func(context.Context, *bitcoinv1alpha1.LightningNode, *corev1.Secret) (*bitcoinv1alpha1.LightningRuntimeStatus, error)
 }
 
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes,verbs=get;list;watch;create;update;patch;delete
@@ -212,7 +219,41 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
+	getInfo := r.GetInfo
+	if getInfo == nil {
+		getInfo = fetchLightningRuntime
+	}
+	runtimeInfo, err := getInfo(ctx, lightningNode, rpcSecret)
+	if err != nil {
+		lightningNode.Status.Phase = "Degraded"
+		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+			Type:               "RuntimeReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             "GetInfoFailed",
+			Message:            err.Error(),
+			ObservedGeneration: lightningNode.Generation,
+		})
+		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LNDUnavailable",
+			Message:            "Authenticated LND GetInfo failed",
+			ObservedGeneration: lightningNode.Generation,
+		})
+		if err := r.Status().Update(ctx, lightningNode); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+	lightningNode.Status.Runtime = *runtimeInfo
 	lightningNode.Status.Phase = "Ready"
+	meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+		Type:               "RuntimeReady",
+		Status:             metav1.ConditionTrue,
+		Reason:             "GetInfoSucceeded",
+		Message:            "Authenticated LND GetInfo succeeded",
+		ObservedGeneration: lightningNode.Generation,
+	})
 	meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
 		Type:               "CredentialsReady",
 		Status:             metav1.ConditionTrue,
@@ -309,6 +350,73 @@ func (r *LightningNodeReconciler) resolveBitcoinConnection(ctx context.Context, 
 		ObservedGeneration: l.Generation,
 	})
 	return connection, true, nil
+}
+
+func fetchLightningRuntime(ctx context.Context, l *bitcoinv1alpha1.LightningNode, secret *corev1.Secret) (*bitcoinv1alpha1.LightningRuntimeStatus, error) {
+	certPEM := secret.Data["tls.cert"]
+	macaroon := secret.Data["readonly.macaroon"]
+	if len(certPEM) == 0 || len(macaroon) == 0 {
+		return nil, fmt.Errorf("published LND runtime credentials are incomplete")
+	}
+
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(certPEM) {
+		return nil, fmt.Errorf("unable to parse published LND TLS certificate")
+	}
+
+	host := l.Name + "." + l.Namespace + ".svc.cluster.local"
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{
+			RootCAs:    roots,
+			ServerName: host,
+			MinVersion: tls.VersionTLS12,
+		}},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+":8080/v1/getinfo", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Grpc-Metadata-macaroon", hex.EncodeToString(macaroon))
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("LND GetInfo request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("LND GetInfo returned %s: %s", resp.Status, string(body))
+	}
+
+	var info struct {
+		Version             string `json:"version"`
+		IdentityPubkey      string `json:"identity_pubkey"`
+		Alias               string `json:"alias"`
+		NumPendingChannels  uint32 `json:"num_pending_channels"`
+		NumActiveChannels   uint32 `json:"num_active_channels"`
+		NumInactiveChannels uint32 `json:"num_inactive_channels"`
+		NumPeers            uint32 `json:"num_peers"`
+		BlockHeight         uint32 `json:"block_height"`
+		SyncedToChain       bool   `json:"synced_to_chain"`
+		SyncedToGraph       bool   `json:"synced_to_graph"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("decode LND GetInfo response: %w", err)
+	}
+
+	return &bitcoinv1alpha1.LightningRuntimeStatus{
+		IdentityPubkey:      info.IdentityPubkey,
+		Alias:               info.Alias,
+		Version:             info.Version,
+		BlockHeight:         info.BlockHeight,
+		SyncedToChain:       info.SyncedToChain,
+		SyncedToGraph:       info.SyncedToGraph,
+		NumPeers:            info.NumPeers,
+		NumPendingChannels:  info.NumPendingChannels,
+		NumActiveChannels:   info.NumActiveChannels,
+		NumInactiveChannels: info.NumInactiveChannels,
+	}, nil
 }
 
 func lightningRPCSecretName(l *bitcoinv1alpha1.LightningNode) string {
@@ -473,6 +581,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 			"--btcd.rpcuser=$(RPCUSER)",
 			"--btcd.rpcpass=$(RPCPASS)",
 			"--rpclisten=0.0.0.0:10009",
+			"--restlisten=0.0.0.0:8080",
 			"--listen=0.0.0.0:9735",
 			"--tlsextradomain=$(RPCSERVICE)",
 			"--tlsdisableautofill",
@@ -481,6 +590,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 		Ports: []corev1.ContainerPort{
 			{ContainerPort: 9735, Name: "p2p"},
 			{ContainerPort: 10009, Name: "rpc"},
+			{ContainerPort: 8080, Name: "rest"},
 		},
 		Env: []corev1.EnvVar{
 			{Name: "NETWORK", Value: network},
@@ -670,6 +780,7 @@ func (r *LightningNodeReconciler) serviceForLightningNode(l *bitcoinv1alpha1.Lig
 			Ports: []corev1.ServicePort{
 				{Name: "p2p", Protocol: corev1.ProtocolTCP, Port: 9735, TargetPort: intstr.FromInt(9735)},
 				{Name: "rpc", Protocol: corev1.ProtocolTCP, Port: 10009, TargetPort: intstr.FromInt(10009)},
+				{Name: "rest", Protocol: corev1.ProtocolTCP, Port: 8080, TargetPort: intstr.FromInt(8080)},
 			},
 			Selector:                 ls,
 			ClusterIP:                "None",
