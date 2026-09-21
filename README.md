@@ -22,7 +22,25 @@ Lightning state is treated as non-reconstructable state. The LND data directory 
 
 Wallet seed material and wallet passwords are supplied only through Kubernetes Secret references. The controller does not copy them into the custom resource or status. `lndinit` validates an existing wallet instead of recreating it, so pod replacement and controller restarts reuse the persisted wallet and node identity.
 
-The status exposes `BitcoinReady`, `StorageFenced`, `WalletReady`, and `Ready` conditions plus a concise lifecycle phase.
+The status exposes `BitcoinReady`, `StorageFenced`, `WalletReady`, `CredentialsReady`, and `Ready` conditions plus a concise lifecycle phase.
+
+### Lightning RPC access
+
+Kiln publishes restricted LND client credentials to a managed Secret after the node becomes available. By default the Secret is named `<lightning-node>-rpc`; set `spec.rpc.secretName` to choose another name. The Secret contains `tls.cert`, `readonly.macaroon`, and `invoice.macaroon`. The admin macaroon is intentionally not exported.
+
+`status.rpcAddress` contains the in-cluster RPC endpoint and `status.rpcSecretName` identifies the credential Secret. LND includes the Kubernetes Service DNS name in its TLS certificate and enables TLS auto-refresh so recovered nodes remain usable through the Service.
+
+For example, after copying the Secret values into files inside a client pod:
+
+```shell
+lncli --network simnet \
+  --rpcserver lnd.default.svc.cluster.local:10009 \
+  --tlscertpath ./tls.cert \
+  --macaroonpath ./readonly.macaroon \
+  getinfo
+```
+
+The per-node credential publisher can only update that node's RPC Secret. It cannot read or modify arbitrary Secrets in the namespace.
 
 ## Requirements
 
