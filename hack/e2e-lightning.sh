@@ -271,6 +271,23 @@ kubectl apply -f "$tmpdir/lightning.yaml"
 kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=240s
 wait_for_secret_keys lnd-rpc
 
+alice_address="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --   lncli --network=simnet     --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009"     --tlscertpath=/data/tls.cert     --macaroonpath=/data/data/chain/bitcoin/simnet/admin.macaroon     newaddress p2wkh | jq -r '.address')"
+[[ -n "$alice_address" && "$alice_address" != "null" ]]
+
+echo "Funding Alice's simnet wallet"
+mine_to_address 101 "$alice_address"
+wait_for_lightning_sync "$LIGHTNING_NODE"
+
+for i in {1..90}; do
+  confirmed_balance="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --     lncli --network=simnet       --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009"       --tlscertpath=/data/tls.cert       --macaroonpath=/data/data/chain/bitcoin/simnet/admin.macaroon       walletbalance | jq -r '.confirmed_balance')"
+  if [[ "$confirmed_balance" =~ ^[0-9]+$ ]] && (( confirmed_balance >= 100000 )); then
+    break
+  fi
+  sleep 2
+done
+[[ "$confirmed_balance" =~ ^[0-9]+$ ]]
+(( confirmed_balance >= 100000 ))
+
 [[ -z "$(kubectl get secret -n "$NAMESPACE" lnd-rpc -o jsonpath='{.data.admin\.macaroon}' 2>/dev/null || true)" ]]
 for i in {1..90}; do
   operator_admin="$(kubectl get secret -n "$NAMESPACE" "$LIGHTNING_NODE-operator-rpc" -o jsonpath='{.data.admin\.macaroon}' 2>/dev/null || true)"
@@ -302,6 +319,7 @@ spec:
 EOF
 kubectl apply -f "$tmpdir/bob-lightning.yaml"
 kubectl wait -n "$NAMESPACE" lightningnode/"$SECOND_LIGHTNING_NODE" --for=condition=Ready --timeout=240s
+wait_for_lightning_sync "$SECOND_LIGHTNING_NODE"
 
 bob_pubkey="$(kubectl get lightningnode -n "$NAMESPACE" "$SECOND_LIGHTNING_NODE" -o jsonpath='{.status.runtime.identityPubkey}')"
 [[ "$bob_pubkey" =~ ^[0-9a-fA-F]{66}$ ]]
