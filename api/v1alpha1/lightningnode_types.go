@@ -43,6 +43,7 @@ type BitcoinConnection struct {
 	// Bitcoin network.
 	// +kubebuilder:default="simnet"
 	// +kubebuilder:validation:Enum=simnet;testnet;regtest;signet;mainnet
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="network is immutable"
 	Network string `json:"network,omitempty"`
 
 	// Name of the secret that contains TLS certificates for the RPC server
