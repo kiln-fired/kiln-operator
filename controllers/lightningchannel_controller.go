@@ -192,6 +192,28 @@ func (r *LightningChannelReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
+	if !node.Status.Runtime.SyncedToChain {
+		channel.Status.Phase = "WaitingForDependency"
+		meta.SetStatusCondition(&channel.Status.Conditions, metav1.Condition{
+			Type:               "Funded",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LightningNodeChainNotSynced",
+			Message:            "Channel is absent and LND chain synchronization is not complete",
+			ObservedGeneration: channel.Generation,
+		})
+		meta.SetStatusCondition(&channel.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LightningNodeChainNotSynced",
+			Message:            "Waiting for LND chain synchronization before funding a new channel",
+			ObservedGeneration: channel.Generation,
+		})
+		if err := r.Status().Update(ctx, channel); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	open := r.OpenChannel
 	if open == nil {
 		open = openLightningChannel
@@ -278,8 +300,8 @@ func (r *LightningChannelReconciler) resolveLightningChannelDependencies(ctx con
 	}
 
 	nodeReady := meta.FindStatusCondition(node.Status.Conditions, "Ready")
-	if nodeReady == nil || nodeReady.Status != metav1.ConditionTrue || !node.Status.Runtime.SyncedToChain {
-		r.setChannelWaiting(channel, "PeerReady", "LightningPeerDependencyNotReady", "Referenced LightningPeer's LightningNode is not ready and chain-synchronized")
+	if nodeReady == nil || nodeReady.Status != metav1.ConditionTrue {
+		r.setChannelWaiting(channel, "PeerReady", "LightningPeerDependencyNotReady", "Referenced LightningPeer's LightningNode is not ready")
 		return node, peer, nil, false, nil
 	}
 

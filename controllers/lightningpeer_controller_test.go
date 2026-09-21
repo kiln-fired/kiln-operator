@@ -245,6 +245,36 @@ var _ = Describe("LightningPeer controller", func() {
 		Expect(k8sClient.Delete(ctx, channel)).To(Succeed())
 	})
 
+	It("keeps an already-connected peer ready while chain sync is transiently false", func() {
+		node := createReadyNode()
+		node.Status.Runtime.SyncedToChain = false
+		Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+		createPeer()
+
+		connectCalls := 0
+		reconciler := LightningPeerReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			ObservePeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) (*LightningPeerObservation, error) {
+				return &LightningPeerObservation{Connected: true, Address: address}, nil
+			},
+			ConnectPeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) error {
+				connectCalls++
+				return nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: peerKey})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(connectCalls).To(BeZero())
+
+		found := &bitcoinv1alpha1.LightningPeer{}
+		Expect(k8sClient.Get(ctx, peerKey, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("Connected"))
+		Expect(found.Status.Connected).To(BeTrue())
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
+	})
+
 	It("waits for chain sync before attempting a peer connection", func() {
 		node := createReadyNode()
 		node.Status.Runtime.SyncedToChain = false
@@ -268,7 +298,8 @@ var _ = Describe("LightningPeer controller", func() {
 		found := &bitcoinv1alpha1.LightningPeer{}
 		Expect(k8sClient.Get(ctx, peerKey, found)).To(Succeed())
 		Expect(found.Status.Phase).To(Equal("WaitingForNode"))
-		Expect(meta.FindStatusCondition(found.Status.Conditions, "NodeReady").Reason).To(Equal("LightningNodeChainNotSynced"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "NodeReady").Status).To(Equal(metav1.ConditionTrue))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Reason).To(Equal("LightningNodeChainNotSynced"))
 	})
 
 })

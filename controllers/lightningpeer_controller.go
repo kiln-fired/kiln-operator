@@ -141,6 +141,29 @@ func (r *LightningPeerReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	if !node.Status.Runtime.SyncedToChain {
+		peer.Status.Phase = "WaitingForNode"
+		peer.Status.Connected = false
+		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
+			Type:               "Connected",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LightningNodeChainNotSynced",
+			Message:            "Peer is absent and LND chain synchronization is not complete",
+			ObservedGeneration: peer.Generation,
+		})
+		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "LightningNodeChainNotSynced",
+			Message:            "Waiting for LND chain synchronization before connecting the peer",
+			ObservedGeneration: peer.Generation,
+		})
+		if err := r.Status().Update(ctx, peer); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	connect := r.ConnectPeer
 	if connect == nil {
 		connect = connectLightningPeer
@@ -232,26 +255,6 @@ func (r *LightningPeerReconciler) resolveLightningPeerNode(ctx context.Context, 
 			Status:             metav1.ConditionFalse,
 			Reason:             "LightningNodeNotReady",
 			Message:            "Peer reconciliation is waiting for its LightningNode",
-			ObservedGeneration: peer.Generation,
-		})
-		return node, nil, false, nil
-	}
-
-	if !node.Status.Runtime.SyncedToChain {
-		peer.Status.Phase = "WaitingForNode"
-		peer.Status.Connected = false
-		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
-			Type:               "NodeReady",
-			Status:             metav1.ConditionFalse,
-			Reason:             "LightningNodeChainNotSynced",
-			Message:            "Referenced LightningNode has not synchronized to its Bitcoin chain",
-			ObservedGeneration: peer.Generation,
-		})
-		meta.SetStatusCondition(&peer.Status.Conditions, metav1.Condition{
-			Type:               "Ready",
-			Status:             metav1.ConditionFalse,
-			Reason:             "LightningNodeChainNotSynced",
-			Message:            "Peer reconciliation is waiting for LND chain synchronization",
 			ObservedGeneration: peer.Generation,
 		})
 		return node, nil, false, nil

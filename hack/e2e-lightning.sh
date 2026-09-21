@@ -407,8 +407,6 @@ done
 
 echo "Confirming channel funding transaction"
 mine_to_address 6 "$alice_address"
-wait_for_lightning_sync "$LIGHTNING_NODE"
-wait_for_lightning_sync "$SECOND_LIGHTNING_NODE"
 kubectl wait -n "$NAMESPACE" lightningchannel/alice-to-bob --for=condition=Ready --timeout=180s
 
 channel_point_before="$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.channelPoint}')"
@@ -451,8 +449,6 @@ done
 [[ "$channel_phase" == "Closing" ]]
 
 mine_to_address 6 "$alice_address"
-wait_for_lightning_sync "$LIGHTNING_NODE"
-wait_for_lightning_sync "$SECOND_LIGHTNING_NODE"
 kubectl wait -n "$NAMESPACE" --for=delete lightningchannel/alice-to-bob --timeout=180s
 
 channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"

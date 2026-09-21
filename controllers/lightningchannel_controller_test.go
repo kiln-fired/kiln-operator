@@ -185,6 +185,68 @@ var _ = Describe("LightningChannel controller", func() {
 		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
 	})
 
+	It("keeps observing an existing channel while chain sync is transiently false", func() {
+		node, _ := createDependencies("simnet")
+		node.Status.Runtime.SyncedToChain = false
+		Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+		createChannel(false)
+
+		openCalls := 0
+		reconciler := LightningChannelReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			ObserveChannel: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningChannel, *corev1.Secret) (*LightningChannelObservation, error) {
+				return &LightningChannelObservation{
+					State: "Open", ChannelPoint: "steady:0", RemotePubkey: pubkey,
+					Active: true, CapacitySats: 100000, LocalBalanceSats: 99000,
+				}, nil
+			},
+			OpenChannel: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningChannel, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) (*LightningChannelOpenResult, error) {
+				openCalls++
+				return nil, nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: channelKey})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(openCalls).To(BeZero())
+
+		found := &bitcoinv1alpha1.LightningChannel{}
+		Expect(k8sClient.Get(ctx, channelKey, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("Open"))
+		Expect(found.Status.Active).To(BeTrue())
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
+	})
+
+	It("does not fund a missing channel while chain sync is false", func() {
+		node, _ := createDependencies("simnet")
+		node.Status.Runtime.SyncedToChain = false
+		Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+		createChannel(false)
+
+		openCalls := 0
+		reconciler := LightningChannelReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			ObserveChannel: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningChannel, *corev1.Secret) (*LightningChannelObservation, error) {
+				return &LightningChannelObservation{State: "Missing"}, nil
+			},
+			OpenChannel: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningChannel, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) (*LightningChannelOpenResult, error) {
+				openCalls++
+				return nil, nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: channelKey})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(openCalls).To(BeZero())
+
+		found := &bitcoinv1alpha1.LightningChannel{}
+		Expect(k8sClient.Get(ctx, channelKey, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("WaitingForDependency"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Reason).To(Equal("LightningNodeChainNotSynced"))
+	})
+
 	It("waits for a connected LightningPeer before funding", func() {
 		_, peer := createDependencies("simnet")
 		peer.Status.Connected = false
