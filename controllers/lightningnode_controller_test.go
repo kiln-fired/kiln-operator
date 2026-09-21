@@ -331,7 +331,8 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionFalse))
 
 		statefulSet := &appsv1.StatefulSet{}
-		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(MatchError(Satisfy(errors.IsNotFound)))
+		err = k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
 
 	It("blocks a LightningNode whose network does not match its BitcoinNode", func() {
@@ -364,7 +365,8 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Reason).To(Equal("NetworkMismatch"))
 
 		statefulSet := &appsv1.StatefulSet{}
-		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(MatchError(Satisfy(errors.IsNotFound)))
+		err = k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
 
 })
