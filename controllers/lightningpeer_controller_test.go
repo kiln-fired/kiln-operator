@@ -30,6 +30,16 @@ var _ = Describe("LightningPeer controller", func() {
 	createReadyNode := func() *bitcoinv1alpha1.LightningNode {
 		node := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: namespace},
+			Spec: bitcoinv1alpha1.LightningNodeSpec{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{External: &bitcoinv1alpha1.ExternalBitcoinConnection{
+					Host:                 "btcd",
+					Network:              "simnet",
+					CertSecret:           "btcd-rpc-tls",
+					ApiAuthSecretName:    "btcd-rpc-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
+				}},
+			},
 		}
 		Expect(k8sClient.Create(ctx, node)).To(Succeed())
 		node.Status.Phase = "Ready"
