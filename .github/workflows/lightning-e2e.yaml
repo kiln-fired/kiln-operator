@@ -42,8 +42,8 @@ jobs:
           docker pull ghcr.io/btcsuite/btcd:v0.26.2
           docker pull docker.io/lightninglabs/lnd:v0.21.0-beta
           docker pull docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta
-          docker pull gcr.io/kubebuilder/kube-rbac-proxy:v0.13.0
-          kind load docker-image --name kiln-e2e kiln-operator:e2e ghcr.io/btcsuite/btcd:v0.26.2 docker.io/lightninglabs/lnd:v0.21.0-beta docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta gcr.io/kubebuilder/kube-rbac-proxy:v0.13.0
+          docker pull registry.k8s.io/kubebuilder/kube-rbac-proxy:v0.13.0
+          kind load docker-image --name kiln-e2e kiln-operator:e2e ghcr.io/btcsuite/btcd:v0.26.2 docker.io/lightninglabs/lnd:v0.21.0-beta docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta registry.k8s.io/kubebuilder/kube-rbac-proxy:v0.13.0
 
       - name: deploy operator
         run: |
