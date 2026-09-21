@@ -299,6 +299,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{Requeue: true}, nil
 		}
 		log.Info("Generated blocks", "numBlocks", len(hashes))
+		blockCount += int64(len(hashes))
 	}
 
 	miningEnabled, err := btcdClient.GetGenerate()
