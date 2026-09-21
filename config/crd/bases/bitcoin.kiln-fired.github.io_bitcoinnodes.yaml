@@ -39,11 +39,11 @@ spec:
                 description: Container image overrides
                 properties:
                   btcdImage:
-                    default: quay.io/kiln-fired/btcd:latest
+                    default: ghcr.io/btcsuite/btcd:v0.26.2
                     description: BTCD container image
                     type: string
                   btcdTimerImage:
-                    default: quay.io/kiln-fired/btcd:latest
+                    default: ghcr.io/btcsuite/btcd:v0.26.2
                     description: Mining timer container image
                     type: string
                 required:
@@ -84,6 +84,16 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              network:
+                default: simnet
+                description: Bitcoin network.
+                enum:
+                - simnet
+                - testnet
+                - regtest
+                - signet
+                - mainnet
+                type: string
               peer:
                 description: Host and port of peer to connect
                 type: string
@@ -140,6 +150,14 @@ spec:
                       to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
                     type: object
                 type: object
+              safety:
+                description: Safety policy for network-sensitive behavior.
+                properties:
+                  allowMainnet:
+                    default: false
+                    description: AllowMainnet must be explicitly set to true before Kiln will start a mainnet node.
+                    type: boolean
+                type: object
               rpcServer:
                 description: Configuration for the RPC Server
                 properties:
@@ -164,11 +182,49 @@ spec:
             description: BitcoinNodeStatus defines the observed state of BitcoinNode
             properties:
               LastBlockCount:
-                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                  of cluster Important: Run "make" to regenerate code after modifying
-                  this file'
                 format: int64
                 type: integer
+              conditions:
+                description: Conditions summarize the observed lifecycle and safety state.
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/)?(([A-Z]([a-z0-9]*[A-Z0-9])*)|([a-z0-9]([a-z0-9]*[A-Z0-9])*))$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              network:
+                description: Network is the resolved Bitcoin network.
+                type: string
             required:
             - LastBlockCount
             type: object
