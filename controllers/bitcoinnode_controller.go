@@ -92,6 +92,24 @@ func validateBitcoinNetworkPolicy(b *bitcoinv1alpha1.BitcoinNode) (string, strin
 	return network, "PolicyAccepted", nil
 }
 
+func (r *BitcoinNodeReconciler) stopBitcoinWorkloadForPolicy(ctx context.Context, b *bitcoinv1alpha1.BitcoinNode) (bool, error) {
+	ss := &appsv1.StatefulSet{}
+	err := r.Get(ctx, types.NamespacedName{Name: b.Name, Namespace: b.Namespace}, ss)
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if ss.DeletionTimestamp.IsZero() {
+		propagation := metav1.DeletePropagationForeground
+		if err := r.Delete(ctx, ss, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 	bitcoinNode := &bitcoinv1alpha1.BitcoinNode{}
@@ -136,6 +154,13 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		})
 		if err := r.Status().Update(ctx, bitcoinNode); err != nil {
 			return ctrl.Result{}, err
+		}
+		stopping, err := r.stopBitcoinWorkloadForPolicy(ctx, bitcoinNode)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if stopping {
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 		}
 		return ctrl.Result{}, nil
 	}
