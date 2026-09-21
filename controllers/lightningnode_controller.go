@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -329,6 +330,13 @@ func derivedLightningName(name, suffix string) string {
 	return name[:maxNameLength-len(suffix)] + suffix
 }
 
+func ensureControlledByLightningNode(obj metav1.Object, l *bitcoinv1alpha1.LightningNode, kind string) error {
+	if !metav1.IsControlledBy(obj, l) {
+		return fmt.Errorf("%s %s already exists and is not controlled by LightningNode %s", kind, obj.GetName(), l.Name)
+	}
+	return nil
+}
+
 func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Context, l *bitcoinv1alpha1.LightningNode) error {
 	secretName := lightningRPCSecretName(l)
 	publisherName := lightningRPCPublisherName(l)
@@ -348,6 +356,8 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 		}
 	} else if err != nil {
 		return err
+	} else if err := ensureControlledByLightningNode(secret, l, "Secret"); err != nil {
+		return err
 	}
 
 	serviceAccount := &corev1.ServiceAccount{}
@@ -361,6 +371,8 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 			return err
 		}
 	} else if err != nil {
+		return err
+	} else if err := ensureControlledByLightningNode(serviceAccount, l, "ServiceAccount"); err != nil {
 		return err
 	}
 
@@ -383,6 +395,8 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 			return err
 		}
 	} else if err != nil {
+		return err
+	} else if err := ensureControlledByLightningNode(role, l, "Role"); err != nil {
 		return err
 	}
 
@@ -409,6 +423,8 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 			return err
 		}
 	} else if err != nil {
+		return err
+	} else if err := ensureControlledByLightningNode(roleBinding, l, "RoleBinding"); err != nil {
 		return err
 	}
 
