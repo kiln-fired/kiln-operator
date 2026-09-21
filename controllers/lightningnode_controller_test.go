@@ -67,6 +67,10 @@ var _ = Describe("LightningNode controller", func() {
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: lightningRPCSecretName(lightningNode), Namespace: Namespace}, rpcSecret); err == nil {
 				Expect(k8sClient.Delete(ctx, rpcSecret)).To(Succeed())
 			}
+			operatorSecret := &corev1.Secret{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: lightningOperatorRPCSecretName(lightningNode), Namespace: Namespace}, operatorSecret); err == nil {
+				Expect(k8sClient.Delete(ctx, operatorSecret)).To(Succeed())
+			}
 			publisherName := lightningRPCPublisherName(lightningNode)
 			serviceAccount := &corev1.ServiceAccount{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, serviceAccount); err == nil {
