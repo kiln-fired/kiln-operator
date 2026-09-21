@@ -396,11 +396,19 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 				MatchLabels: ls,
 			},
 			ServiceName: b.Name,
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
+			},
+			PersistentVolumeClaimRetentionPolicy: &appsv1.StatefulSetPersistentVolumeClaimRetentionPolicy{
+				WhenDeleted: appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+				WhenScaled:  appsv1.RetainPersistentVolumeClaimRetentionPolicyType,
+			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
+					TerminationGracePeriodSeconds: ptr.To(int64(60)),
 					SecurityContext: &corev1.PodSecurityContext{
 						FSGroup: ptr.To(int64(65532)),
 					},
@@ -429,7 +437,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Name:   "btcd-data",
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{"ReadWriteOnce"},
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOncePod},
 					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
 							corev1.ResourceStorage: resource.MustParse("2Gi"),
