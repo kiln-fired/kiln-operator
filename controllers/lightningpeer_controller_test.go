@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -17,14 +18,14 @@ import (
 )
 
 var _ = Describe("LightningPeer controller", func() {
-	const namespace = "test-lightning-peer"
 	const nodeName = "alice"
 	const peerName = "bob"
 	const pubkey = "02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const address = "bob.example.com:9735"
 
 	ctx := context.Background()
-	peerKey := types.NamespacedName{Namespace: namespace, Name: peerName}
+	var namespace string
+	var peerKey types.NamespacedName
 
 	createReadyNode := func() *bitcoinv1alpha1.LightningNode {
 		node := &bitcoinv1alpha1.LightningNode{
@@ -66,7 +67,9 @@ var _ = Describe("LightningPeer controller", func() {
 	}
 
 	BeforeEach(func() {
-		_ = k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}})
+		namespace = fmt.Sprintf("test-lightning-peer-%d", time.Now().UnixNano())
+		peerKey = types.NamespacedName{Namespace: namespace, Name: peerName}
+		Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}})).To(Succeed())
 	})
 
 	AfterEach(func() {
