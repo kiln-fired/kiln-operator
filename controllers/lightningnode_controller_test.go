@@ -34,14 +34,24 @@ var _ = Describe("LightningNode controller", func() {
 	AfterEach(func() {
 		lightningNode := &bitcoinv1alpha1.LightningNode{}
 		if err := k8sClient.Get(ctx, lightningNodeNamespaceName, lightningNode); err == nil {
-			_ = k8sClient.Delete(ctx, lightningNode)
+			Expect(k8sClient.Delete(ctx, lightningNode)).To(Succeed())
+
+			statefulSet := &appsv1.StatefulSet{}
+			if err := k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet); err == nil {
+				Expect(k8sClient.Delete(ctx, statefulSet)).To(Succeed())
+			}
+			service := &corev1.Service{}
+			if err := k8sClient.Get(ctx, lightningNodeNamespaceName, service); err == nil {
+				Expect(k8sClient.Delete(ctx, service)).To(Succeed())
+			}
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
+			Expect(err).ToNot(HaveOccurred())
 			Eventually(func() bool {
-				_, _ = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
 				err := k8sClient.Get(ctx, lightningNodeNamespaceName, &bitcoinv1alpha1.LightningNode{})
 				return errors.IsNotFound(err)
-			}, time.Minute, 100*time.Millisecond).Should(BeTrue())
+			}, time.Minute, time.Second).Should(BeTrue())
 		}
-		_ = k8sClient.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: Namespace}})
 	})
 
 	It("preserves Lightning state and reports lifecycle status", func() {
