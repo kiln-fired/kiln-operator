@@ -29,7 +29,7 @@ jobs:
 
       - name: create cluster
         run: |
-          kind create cluster             --name kiln-e2e             --image kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5             --wait 120s
+          kind create cluster --name kiln-e2e --image kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5 --wait 120s
           kubectl get nodes
           kubectl get storageclass
 
@@ -42,12 +42,19 @@ jobs:
           docker pull ghcr.io/btcsuite/btcd:v0.26.2
           docker pull docker.io/lightninglabs/lnd:v0.21.0-beta
           docker pull docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta
-          kind load docker-image --name kiln-e2e             kiln-operator:e2e             ghcr.io/btcsuite/btcd:v0.26.2             docker.io/lightninglabs/lnd:v0.21.0-beta             docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta
+          docker pull gcr.io/kubebuilder/kube-rbac-proxy:v0.13.0
+          kind load docker-image --name kiln-e2e kiln-operator:e2e ghcr.io/btcsuite/btcd:v0.26.2 docker.io/lightninglabs/lnd:v0.21.0-beta docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta gcr.io/kubebuilder/kube-rbac-proxy:v0.13.0
 
       - name: deploy operator
         run: |
           make deploy IMG=kiln-operator:e2e
-          kubectl rollout status deployment/kiln-operator-controller-manager             -n kiln-operator-system             --timeout=120s
+          if ! kubectl rollout status deployment/kiln-operator-controller-manager -n kiln-operator-system --timeout=120s; then
+            kubectl get pods -n kiln-operator-system -o wide
+            kubectl describe pods -n kiln-operator-system
+            kubectl logs -n kiln-operator-system deployment/kiln-operator-controller-manager -c manager --tail=300 || true
+            kubectl logs -n kiln-operator-system deployment/kiln-operator-controller-manager -c kube-rbac-proxy --tail=300 || true
+            exit 1
+          fi
 
       - name: run Lightning recovery e2e
         run: |
