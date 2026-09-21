@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,6 +39,8 @@ import (
 )
 
 // BitcoinNodeReconciler reconciles a BitcoinNode object
+const bitcoinNodeFinalizer = "bitcoin.kiln-fired.github.io/stateful-cleanup"
+
 type BitcoinNodeReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -62,6 +65,25 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		log.Error(err, "Failed to get BitcoinNode")
 		return ctrl.Result{}, err
 	}
+
+	if !bitcoinNode.DeletionTimestamp.IsZero() {
+		return r.finalizeBitcoinNode(ctx, bitcoinNode)
+	}
+
+	if !containsString(bitcoinNode.Finalizers, bitcoinNodeFinalizer) {
+		bitcoinNode.Finalizers = append(bitcoinNode.Finalizers, bitcoinNodeFinalizer)
+		if err := r.Update(ctx, bitcoinNode); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+		Type:               "StorageFenced",
+		Status:             metav1.ConditionTrue,
+		Reason:             "ReadWriteOncePod",
+		Message:            "Bitcoin data volume is restricted to a single pod",
+		ObservedGeneration: bitcoinNode.Generation,
+	})
 
 	//Reconcile StatefulSet
 	foundStatefulSet := &appsv1.StatefulSet{}
@@ -133,6 +155,14 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if err != nil {
 		log.Error(err, "Failed to get the block count")
+		meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "RPCUnavailable",
+			Message:            "Bitcoin RPC is not yet available",
+			ObservedGeneration: bitcoinNode.Generation,
+		})
+		_ = r.Status().Update(ctx, bitcoinNode)
 		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
@@ -181,6 +211,13 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	bitcoinNode.Status.LastBlockCount = blockCount
+	meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionTrue,
+		Reason:             "RPCReady",
+		Message:            "Bitcoin RPC is available",
+		ObservedGeneration: bitcoinNode.Generation,
+	})
 
 	err = r.Status().Update(ctx, bitcoinNode)
 	if err != nil {
@@ -291,6 +328,17 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			RunAsGroup:               ptr.To(int64(65532)),
 			AllowPrivilegeEscalation: ptr.To(false),
 			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+		},
+		Lifecycle: &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/bin/sh",
+						"-c",
+						"btcctl --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert stop || true",
+					},
+				},
+			},
 		},
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -491,6 +539,53 @@ func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.Bitcoin
 		return nil
 	}
 	return svc
+}
+
+func (r *BitcoinNodeReconciler) finalizeBitcoinNode(ctx context.Context, b *bitcoinv1alpha1.BitcoinNode) (ctrl.Result, error) {
+	if !containsString(b.Finalizers, bitcoinNodeFinalizer) {
+		return ctrl.Result{}, nil
+	}
+
+	ss := &appsv1.StatefulSet{}
+	err := r.Get(ctx, types.NamespacedName{Name: b.Name, Namespace: b.Namespace}, ss)
+	if err != nil && !errors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	if err == nil {
+		if ss.DeletionTimestamp.IsZero() {
+			propagation := metav1.DeletePropagationForeground
+			if err := r.Delete(ctx, ss, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{RequeueAfter: time.Second * 2}, nil
+	}
+
+	b.Finalizers = removeString(b.Finalizers, bitcoinNodeFinalizer)
+	if err := r.Update(ctx, b); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func containsString(values []string, value string) bool {
+	for _, item := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(values []string, value string) []string {
+	result := values[:0]
+	for _, item := range values {
+		if item != value {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func labelsForBitcoinNode(name string) map[string]string {
