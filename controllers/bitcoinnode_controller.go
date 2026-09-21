@@ -197,11 +197,11 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 
 	btcdImage := b.Spec.ContainerImages.BtcdImage
 	if btcdImage == "" {
-		btcdImage = "btcsuite/btcd:v0.26.2"
+		btcdImage = "ghcr.io/btcsuite/btcd:v0.26.2"
 	}
 	timerImage := b.Spec.ContainerImages.TimerImage
 	if timerImage == "" {
-		timerImage = "btcsuite/btcd:v0.26.2"
+		timerImage = "ghcr.io/btcsuite/btcd:v0.26.2"
 	}
 	rewardAddressKey := b.Spec.Mining.RewardAddress.SecretKey
 	if rewardAddressKey == "" {
