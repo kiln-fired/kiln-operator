@@ -180,6 +180,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"  
 
 kubectl create secret generic btcd-rpc-tls -n "$NAMESPACE"   --from-file=tls.crt="$tmpdir/btcd.crt"   --from-file=tls.key="$tmpdir/btcd.key"   --from-file=ca.crt="$tmpdir/btcd.crt"
 kubectl create secret generic btcd-rpc-creds -n "$NAMESPACE"   --from-literal=username=kiln   --from-literal=password=kiln-e2e-password
+kubectl create secret generic mining-address -n "$NAMESPACE"   --from-literal=address=SNrExv4meNtf7QKvwj5EWudgZUrE14xFqc
 kubectl create secret generic alice-wallet -n "$NAMESPACE"   --from-literal=password=kiln-wallet-password
 kubectl create secret generic seed -n "$NAMESPACE"   --from-literal=mnemonic='above pioneer library glimpse exhibit analyst monitor holiday boil art ketchup mail hunt since now pattern vacant arch museum tourist brisk come pilot devote'   --from-literal=passphrase=test
 kubectl create secret generic bob-wallet -n "$NAMESPACE"   --from-literal=password=kiln-bob-wallet-password
@@ -210,8 +211,11 @@ metadata:
 spec:
   mining:
     cpuMiningEnabled: false
-    minBlocks: 0
+    minBlocks: 1
     periodicBlocksEnabled: false
+    rewardAddress:
+      secretName: mining-address
+      secretKey: address
   rpcServer:
     certSecret: btcd-rpc-tls
     apiAuthSecretName: btcd-rpc-creds
@@ -224,6 +228,7 @@ write_lightning_manifest
 kubectl apply -f "$tmpdir/bitcoin.yaml"
 kubectl wait -n "$NAMESPACE" bitcoinnode/"$BITCOIN_NODE" --for=condition=Ready --timeout=180s
 [[ "$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.network}')" == "simnet" ]]
+[[ "$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')" -ge 1 ]]
 
 cat >"$tmpdir/network-mismatch-lightning.yaml" <<EOF
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
