@@ -335,7 +335,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert stop || true",
+						"btcctl --configfile=/dev/null --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert stop || true",
 					},
 				},
 			},
@@ -346,7 +346,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
+						"btcctl --configfile=/dev/null --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
 					},
 				},
 			},
@@ -358,7 +358,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
+						"btcctl --configfile=/dev/null --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
 					},
 				},
 			},
@@ -392,7 +392,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		Name:    "timer",
 		Command: []string{"/bin/sh"},
 		Args: []string{"-c", fmt.Sprintf(
-			"while true; do btcctl --simnet --rpcserver=127.0.0.1:18556 --rpcuser=$RPCUSER --rpcpass=$RPCPASS --rpccert=/rpc/rpc.cert generate 1; sleep %d; done",
+			"while true; do btcctl --configfile=/dev/null --simnet --rpcserver=127.0.0.1:18556 --rpcuser=$RPCUSER --rpcpass=$RPCPASS --rpccert=/rpc/rpc.cert generate 1; sleep %d; done",
 			b.Spec.Mining.SecondsPerBlock,
 		)},
 		Env:     environment,

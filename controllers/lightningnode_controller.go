@@ -475,6 +475,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 			"--rpclisten=0.0.0.0:10009",
 			"--listen=0.0.0.0:9735",
 			"--tlsextradomain=$(RPCSERVICE)",
+			"--tlsdisableautofill",
 			"--tlsautorefresh",
 		},
 		Ports: []corev1.ContainerPort{

@@ -1,0 +1,86 @@
+name: lightning e2e
+
+on:
+  pull_request:
+    paths:
+      - "api/**"
+      - "controllers/**"
+      - "config/**"
+      - "Dockerfile"
+      - "Makefile"
+      - "go.mod"
+      - "go.sum"
+      - "hack/e2e-lightning.sh"
+      - ".github/workflows/lightning-e2e.yaml"
+  schedule:
+    - cron: "23 8 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: lightning-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lightning-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: check out code
+        uses: actions/checkout@v7
+
+      - name: install go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.0'
+          cache: true
+
+      - name: install kind
+        run: |
+          curl -fsSLo /tmp/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
+          echo "aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  /tmp/kind" | sha256sum -c -
+          sudo install -m 0755 /tmp/kind /usr/local/bin/kind
+
+      - name: create cluster
+        run: |
+          kind create cluster --name kiln-e2e --image kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5 --wait 120s
+          kubectl get nodes
+          kubectl get storageclass
+
+      - name: normalize go modules
+        run: go mod tidy
+
+      - name: build and load images
+        run: |
+          docker build -t kiln-operator:e2e .
+          docker pull ghcr.io/btcsuite/btcd:v0.26.2
+          docker pull docker.io/lightninglabs/lnd:v0.21.0-beta
+          docker pull docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta
+          docker pull registry.k8s.io/kubebuilder/kube-rbac-proxy:v0.13.0
+          kind load docker-image --name kiln-e2e kiln-operator:e2e ghcr.io/btcsuite/btcd:v0.26.2 docker.io/lightninglabs/lnd:v0.21.0-beta docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta registry.k8s.io/kubebuilder/kube-rbac-proxy:v0.13.0
+
+      - name: deploy operator
+        run: |
+          make deploy IMG=kiln-operator:e2e
+          if ! kubectl rollout status deployment/kiln-operator-controller-manager -n kiln-operator-system --timeout=120s; then
+            kubectl get pods -n kiln-operator-system -o wide
+            kubectl describe pods -n kiln-operator-system
+            kubectl logs -n kiln-operator-system deployment/kiln-operator-controller-manager -c manager --tail=300 || true
+            kubectl logs -n kiln-operator-system deployment/kiln-operator-controller-manager -c kube-rbac-proxy --tail=300 || true
+            exit 1
+          fi
+
+      - name: run Lightning recovery e2e
+        run: |
+          chmod +x hack/e2e-lightning.sh
+          hack/e2e-lightning.sh
+
+      - name: dump kind logs
+        if: failure()
+        run: kind export logs /tmp/kind-logs --name kiln-e2e
+
+      - name: clean up cluster
+        if: always()
+        run: kind delete cluster --name kiln-e2e
