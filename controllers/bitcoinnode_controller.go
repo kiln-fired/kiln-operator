@@ -52,6 +52,46 @@ type BitcoinNodeReconciler struct {
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services;secrets,verbs=get;list;watch;create;update;patch;delete
 
+func resolvedBitcoinNetwork(b *bitcoinv1alpha1.BitcoinNode) string {
+	if b.Spec.Network == "" {
+		return "simnet"
+	}
+	return b.Spec.Network
+}
+
+func bitcoinNetworkFlag(network string) (string, error) {
+	switch network {
+	case "simnet":
+		return "--simnet", nil
+	case "testnet":
+		return "--testnet", nil
+	case "regtest":
+		return "--regtest", nil
+	case "signet":
+		return "--signet", nil
+	case "mainnet":
+		return "", nil
+	default:
+		return "", fmt.Errorf("unsupported Bitcoin network %q", network)
+	}
+}
+
+func validateBitcoinNetworkPolicy(b *bitcoinv1alpha1.BitcoinNode) (string, string, error) {
+	network := resolvedBitcoinNetwork(b)
+	if _, err := bitcoinNetworkFlag(network); err != nil {
+		return network, "UnsupportedNetwork", err
+	}
+	if network == "mainnet" {
+		if !b.Spec.Safety.AllowMainnet {
+			return network, "MainnetOptInRequired", fmt.Errorf("mainnet requires spec.safety.allowMainnet=true")
+		}
+		if b.Spec.Mining.CpuMiningEnabled || b.Spec.Mining.MinBlocks > 0 || b.Spec.Mining.PeriodicBlocksEnabled {
+			return network, "MainnetMiningForbidden", fmt.Errorf("Kiln automated mining controls are not allowed on mainnet")
+		}
+	}
+	return network, "PolicyAccepted", nil
+}
+
 func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := ctrllog.FromContext(ctx)
 	bitcoinNode := &bitcoinv1alpha1.BitcoinNode{}
@@ -76,6 +116,36 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, err
 		}
 	}
+
+	network, networkReason, networkErr := validateBitcoinNetworkPolicy(bitcoinNode)
+	bitcoinNode.Status.Network = network
+	if networkErr != nil {
+		meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+			Type:               "NetworkReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             networkReason,
+			Message:            networkErr.Error(),
+			ObservedGeneration: bitcoinNode.Generation,
+		})
+		meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             networkReason,
+			Message:            networkErr.Error(),
+			ObservedGeneration: bitcoinNode.Generation,
+		})
+		if err := r.Status().Update(ctx, bitcoinNode); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+	meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+		Type:               "NetworkReady",
+		Status:             metav1.ConditionTrue,
+		Reason:             networkReason,
+		Message:            "Bitcoin network policy accepted for " + network,
+		ObservedGeneration: bitcoinNode.Generation,
+	})
 
 	meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
 		Type:               "StorageFenced",
@@ -244,11 +314,17 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	if rewardAddressKey == "" {
 		rewardAddressKey = "np2wkhAddress"
 	}
+	network := resolvedBitcoinNetwork(b)
+	networkFlag, _ := bitcoinNetworkFlag(network)
 
 	environment := []corev1.EnvVar{
 		{
 			Name:  "HOME",
 			Value: "/home/btcd",
+		},
+		{
+			Name:  "NETWORKFLAG",
+			Value: networkFlag,
 		},
 		{
 			Name: "RPCUSER",
@@ -290,7 +366,6 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	}
 
 	btcdArgs := []string{
-		"--simnet",
 		"--listen=0.0.0.0:18555",
 		"--rpclisten=0.0.0.0:18556",
 		"--rpcuser=$(RPCUSER)",
@@ -299,6 +374,9 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		"--rpckey=/rpc/rpc.key",
 		"--datadir=/data",
 		"--logdir=/data/logs",
+	}
+	if networkFlag != "" {
+		btcdArgs = append([]string{networkFlag}, btcdArgs...)
 	}
 	if b.Spec.Mining.RewardAddress.SecretName != "" {
 		btcdArgs = append(btcdArgs, "--miningaddr=$(MINING_ADDRESS)")
@@ -335,7 +413,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --configfile=/dev/null --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert stop || true",
+						"btcctl --configfile=/dev/null $(NETWORKFLAG) --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert stop || true",
 					},
 				},
 			},
@@ -346,7 +424,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --configfile=/dev/null --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
+						"btcctl --configfile=/dev/null $(NETWORKFLAG) --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
 					},
 				},
 			},
@@ -358,7 +436,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Command: []string{
 						"/bin/sh",
 						"-c",
-						"btcctl --configfile=/dev/null --simnet --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
+						"btcctl --configfile=/dev/null $(NETWORKFLAG) --rpcserver=127.0.0.1:18556 --rpcuser=\"$RPCUSER\" --rpcpass=\"$RPCPASS\" --rpccert=/rpc/rpc.cert getblockcount",
 					},
 				},
 			},
@@ -392,7 +470,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		Name:    "timer",
 		Command: []string{"/bin/sh"},
 		Args: []string{"-c", fmt.Sprintf(
-			"while true; do btcctl --configfile=/dev/null --simnet --rpcserver=127.0.0.1:18556 --rpcuser=$RPCUSER --rpcpass=$RPCPASS --rpccert=/rpc/rpc.cert generate 1; sleep %d; done",
+			"while true; do btcctl --configfile=/dev/null $(NETWORKFLAG) --rpcserver=127.0.0.1:18556 --rpcuser=$RPCUSER --rpcpass=$RPCPASS --rpccert=/rpc/rpc.cert generate 1; sleep %d; done",
 			b.Spec.Mining.SecondsPerBlock,
 		)},
 		Env:     environment,
