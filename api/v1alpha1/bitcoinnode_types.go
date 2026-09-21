@@ -99,6 +99,7 @@ type BitcoinNodeSpec struct {
 	// Bitcoin network.
 	// +kubebuilder:default="simnet"
 	// +kubebuilder:validation:Enum=simnet;testnet;regtest;signet;mainnet
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="network is immutable"
 	Network string `json:"network,omitempty"`
 
 	// Safety policy for network-sensitive behavior.
