@@ -20,13 +20,14 @@ Kiln currently optimizes for one thing: making a Bitcoin-backed LND node behave 
 
 ## What Kiln manages
 
-Kiln provides three namespaced APIs.
+Kiln provides namespaced APIs for Bitcoin, Lightning nodes, peers, channels, and seed material.
 
 | Resource | Purpose |
 | --- | --- |
 | `BitcoinNode` | Runs a persistent btcd node and exposes its RPC service |
 | `LightningNode` | Runs a persistent LND node backed by a `BitcoinNode` or explicit btcd RPC connection |
 | `LightningPeer` | Declares a peer connection that Kiln continuously reconciles through LND |
+| `LightningChannel` | Declares a funded channel that Kiln reconciles through pending, open, and closing states |
 | `Seed` | Creates LND-compatible seed material for development/testing workflows |
 
 The primary runtime relationship is:
@@ -182,6 +183,42 @@ Status includes the observed connection address, whether the connection is inbou
 Deleting a `LightningPeer` requests a clean disconnect before its finalizer is released. LND does not allow a peer with active or pending channels to be disconnected, so deletion can remain pending until those channel dependencies are removed.
 
 Peer reconciliation uses a separate LightningNode-owned internal credential Secret. The public RPC Secret remains limited to TLS, read-only, and invoice macaroons and never exposes `admin.macaroon`.
+
+## Declarative Lightning channels
+
+`LightningChannel` represents a channel that should exist between a local `LightningNode` and a declared `LightningPeer`.
+
+```yaml
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: LightningChannel
+metadata:
+  name: alice-to-bob
+spec:
+  nodeRef: lnd
+  peerRef: bob
+  capacitySats: 100000
+  private: true
+  minConfs: 1
+```
+
+The CR is the desired state. Kiln observes LND before taking any funding action. If the channel is already pending or open, reconciliation adopts the existing Kiln-owned channel and does not fund another one.
+
+Each funding workflow is tagged inside LND with a memo derived from the `LightningChannel` UID. LND persists that memo in both pending and open channel records. This gives Kiln a durable identity for the exact channel it owns, including across controller restarts or a crash after LND accepted a funding request but before Kubernetes status was updated.
+
+Kiln does not adopt unrelated channels merely because they have the same peer or capacity. Multiple independently managed channels to the same peer are therefore unambiguous.
+
+Channel creation waits for:
+
+- the referenced `LightningNode` to be ready and synchronized to Bitcoin
+- the referenced `LightningPeer` to be connected and ready
+- internal LND operator credentials to be available
+- explicit `safety.allowMainnet: true` on a mainnet `LightningChannel`
+
+Funding parameters are immutable because changing the peer, capacity, privacy, or input-confirmation policy would describe a different channel rather than an in-place update.
+
+Status reports the funding outpoint, remote pubkey, active state, capacity, local and remote balances, privacy, lifecycle phase, and readiness conditions.
+
+Deleting a `LightningChannel` reconciles toward channel absence. Kiln requests a cooperative close and keeps the finalizer until LND no longer reports the channel. A pending-open channel is allowed to finish opening before Kiln attempts the cooperative close. Kiln does not automatically force-close a channel when a cooperative close is blocked.
 
 ## LND client access
 
@@ -423,13 +460,14 @@ Implemented:
 - restricted RPC credential publication
 - authenticated runtime status
 - declarative Lightning peer reconciliation
+- declarative Lightning channel lifecycle
+- crash-safe channel ownership through persisted LND memos
 - explicit network/mainnet guardrails
 - cross-resource network consistency
 - destructive real-cluster recovery testing
 
 Next areas under consideration:
 
-- declarative Lightning channel lifecycle
 - invoice lifecycle
 - payment intent only where it can be modeled safely as durable desired state
 - external backup/recovery integration
