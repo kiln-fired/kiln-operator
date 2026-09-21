@@ -285,6 +285,9 @@ var _ = Describe("LightningPeer controller", func() {
 		reconciler := LightningPeerReconciler{
 			Client: k8sClient,
 			Scheme: k8sClient.Scheme(),
+			ObservePeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) (*LightningPeerObservation, error) {
+				return &LightningPeerObservation{Connected: false}, nil
+			},
 			ConnectPeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) error {
 				connectCalls++
 				return nil
