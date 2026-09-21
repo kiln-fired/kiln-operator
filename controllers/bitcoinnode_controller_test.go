@@ -258,6 +258,12 @@ var _ = Describe("BitcoinNode controller", func() {
 			Spec: bitcoinv1alpha1.BitcoinNodeSpec{
 				Network: "mainnet",
 				Safety: bitcoinv1alpha1.NetworkSafetyPolicy{AllowMainnet: true},
+				RPCServer: bitcoinv1alpha1.RPCServer{
+					CertSecret:           "btcd-rpc-tls",
+					ApiAuthSecretName:    "btcd-rpc-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
+				},
 			},
 		}
 		Expect(k8sClient.Create(ctx, bitcoinNode)).To(Succeed())
