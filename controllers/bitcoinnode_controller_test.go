@@ -7,6 +7,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -224,6 +225,53 @@ var _ = Describe("BitcoinNode controller", func() {
 			Expect(len(foundStatefulSet.Spec.Template.Spec.Containers)).To(Equal(2))
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
+	})
+
+	It("blocks mainnet unless it is explicitly enabled", func() {
+		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
+			ObjectMeta: metav1.ObjectMeta{Name: BitcoinNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.BitcoinNodeSpec{
+				Network: "mainnet",
+			},
+		}
+		Expect(k8sClient.Create(ctx, bitcoinNode)).To(Succeed())
+
+		reconciler := BitcoinNodeReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: bitcoinNodeNamespaceName})
+		Expect(err).ToNot(HaveOccurred())
+
+		found := &bitcoinv1alpha1.BitcoinNode{}
+		Expect(k8sClient.Get(ctx, bitcoinNodeNamespaceName, found)).To(Succeed())
+		Expect(found.Status.Network).To(Equal("mainnet"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "NetworkReady").Status).To(Equal(metav1.ConditionFalse))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "NetworkReady").Reason).To(Equal("MainnetOptInRequired"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionFalse))
+
+		statefulSet := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(ctx, statefulSetNamespaceName, statefulSet)).To(MatchError(Satisfy(errors.IsNotFound)))
+	})
+
+	It("starts mainnet only after explicit opt-in and does not use a test-network flag", func() {
+		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
+			ObjectMeta: metav1.ObjectMeta{Name: BitcoinNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.BitcoinNodeSpec{
+				Network: "mainnet",
+				Safety: bitcoinv1alpha1.NetworkSafetyPolicy{AllowMainnet: true},
+			},
+		}
+		Expect(k8sClient.Create(ctx, bitcoinNode)).To(Succeed())
+
+		reconciler := BitcoinNodeReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: bitcoinNodeNamespaceName})
+		Expect(err).ToNot(HaveOccurred())
+
+		statefulSet := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(ctx, statefulSetNamespaceName, statefulSet)).To(Succeed())
+		args := statefulSet.Spec.Template.Spec.Containers[0].Args
+		Expect(args).ToNot(ContainElement("--simnet"))
+		Expect(args).ToNot(ContainElement("--testnet"))
+		Expect(args).ToNot(ContainElement("--regtest"))
+		Expect(args).ToNot(ContainElement("--signet"))
 	})
 
 })
