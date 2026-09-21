@@ -101,6 +101,34 @@ var _ = Describe("BitcoinNode controller", func() {
 			return k8sClient.Get(ctx, statefulSetNamespaceName, foundStatefulSet)
 		}, time.Minute, time.Second).Should(Succeed())
 
+		By("checking the upstream btcd runtime configuration")
+		Expect(foundStatefulSet.Spec.Template.Spec.Containers).To(HaveLen(2))
+		btcdContainer := foundStatefulSet.Spec.Template.Spec.Containers[0]
+		Expect(btcdContainer.Name).To(Equal("btcd"))
+		Expect(btcdContainer.Image).To(Equal("ghcr.io/btcsuite/btcd:v0.26.2"))
+		Expect(btcdContainer.Command).To(Equal([]string{"btcd"}))
+		Expect(btcdContainer.Args).To(ContainElements(
+			"--simnet",
+			"--listen=0.0.0.0:18555",
+			"--rpclisten=0.0.0.0:18556",
+			"--rpccert=/rpc/rpc.cert",
+			"--rpckey=/rpc/rpc.key",
+			"--datadir=/data",
+			"--logdir=/data/logs",
+		))
+		Expect(foundStatefulSet.Spec.Template.Spec.SecurityContext).ToNot(BeNil())
+		Expect(foundStatefulSet.Spec.Template.Spec.SecurityContext.FSGroup).ToNot(BeNil())
+		Expect(*foundStatefulSet.Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(int64(65532)))
+		Expect(btcdContainer.SecurityContext).ToNot(BeNil())
+		Expect(btcdContainer.SecurityContext.RunAsUser).ToNot(BeNil())
+		Expect(*btcdContainer.SecurityContext.RunAsUser).To(Equal(int64(65532)))
+		Expect(btcdContainer.SecurityContext.RunAsGroup).ToNot(BeNil())
+		Expect(*btcdContainer.SecurityContext.RunAsGroup).To(Equal(int64(65532)))
+		Expect(btcdContainer.LivenessProbe.Exec.Command).To(HaveLen(3))
+		Expect(btcdContainer.LivenessProbe.Exec.Command[0:2]).To(Equal([]string{"/bin/sh", "-c"}))
+		Expect(btcdContainer.ReadinessProbe.Exec.Command).To(HaveLen(3))
+		Expect(btcdContainer.ReadinessProbe.Exec.Command[0:2]).To(Equal([]string{"/bin/sh", "-c"}))
+
 		By("checking if the mining address is the expected secret reference")
 		Eventually(func() error {
 			miningAddressEnvExists := false

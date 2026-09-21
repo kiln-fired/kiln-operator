@@ -24,11 +24,11 @@ import (
 type BTCDContainerImages struct {
 
 	// BTCD container image
-	// +kubebuilder:default="quay.io/kiln-fired/btcd:latest"
+	// +kubebuilder:default="ghcr.io/btcsuite/btcd:v0.26.2"
 	BtcdImage string `json:"btcdImage,omitempty"`
 
 	// Mining timer container image
-	// +kubebuilder:default="quay.io/kiln-fired/btcd:latest"
+	// +kubebuilder:default="ghcr.io/btcsuite/btcd:v0.26.2"
 	TimerImage string `json:"btcdTimerImage,omitemply"`
 }
 
@@ -87,7 +87,7 @@ type BitcoinNodeSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Container image overrides
-	// +kubebuilder:default={btcdImage: "quay.io/kiln-fired/btcd:latest", btcdTimerImage: "quay.io/kiln-fired/btcd:latest"}
+	// +kubebuilder:default={btcdImage: "ghcr.io/btcsuite/btcd:v0.26.2", btcdTimerImage: "ghcr.io/btcsuite/btcd:v0.26.2"}
 	ContainerImages BTCDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the RPC Server
