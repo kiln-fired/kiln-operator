@@ -143,6 +143,21 @@ assert_same_pubkey() {
   echo "Verified LND identity: $actual"
 }
 
+wait_for_lightning_sync() {
+  local node="$1"
+  local attempts=90
+  for ((i=1; i<=attempts; i++)); do
+    local synced
+    synced="$(kubectl get lightningnode -n "$NAMESPACE" "$node" -o jsonpath='{.status.runtime.syncedToChain}' 2>/dev/null || true)"
+    if [[ "$synced" == "true" ]]; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Timed out waiting for LightningNode $node to synchronize to Bitcoin" >&2
+  return 1
+}
+
 kubectl create namespace "$NAMESPACE"
 
 cat >"$tmpdir/mainnet-blocked-bitcoin.yaml" <<EOF
