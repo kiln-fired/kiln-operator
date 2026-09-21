@@ -5,6 +5,7 @@ resources:
 - bases/bitcoin.kiln-fired.github.io_bitcoinnodes.yaml
 - bases/bitcoin.kiln-fired.github.io_lightningnodes.yaml
 - bases/bitcoin.kiln-fired.github.io_lightningpeers.yaml
+- bases/bitcoin.kiln-fired.github.io_lightningchannels.yaml
 - bases/bitcoin.kiln-fired.github.io_seeds.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
