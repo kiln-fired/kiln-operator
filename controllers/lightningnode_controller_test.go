@@ -29,7 +29,24 @@ var _ = Describe("LightningNode controller", func() {
 
 	BeforeEach(func() {
 		_ = k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: Namespace}})
-		reconciler = LightningNodeReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		reconciler = LightningNodeReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			GetInfo: func(context.Context, *bitcoinv1alpha1.LightningNode, *corev1.Secret) (*bitcoinv1alpha1.LightningRuntimeStatus, error) {
+				return &bitcoinv1alpha1.LightningRuntimeStatus{
+					IdentityPubkey:      "02kiln",
+					Alias:               "kiln-e2e",
+					Version:             "0.21.0-beta",
+					BlockHeight:         321,
+					SyncedToChain:       true,
+					SyncedToGraph:       true,
+					NumPeers:            2,
+					NumPendingChannels:  1,
+					NumActiveChannels:   3,
+					NumInactiveChannels: 4,
+				}, nil
+			},
+		}
 	})
 
 	AfterEach(func() {
@@ -197,7 +214,13 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(foundLightningNode.Status.Phase).To(Equal("Ready"))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "WalletReady").Status).To(Equal(metav1.ConditionTrue))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "CredentialsReady").Status).To(Equal(metav1.ConditionTrue))
+		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "RuntimeReady").Status).To(Equal(metav1.ConditionTrue))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
+		Expect(foundLightningNode.Status.Runtime.IdentityPubkey).To(Equal("02kiln"))
+		Expect(foundLightningNode.Status.Runtime.Version).To(Equal("0.21.0-beta"))
+		Expect(foundLightningNode.Status.Runtime.BlockHeight).To(Equal(uint32(321)))
+		Expect(foundLightningNode.Status.Runtime.SyncedToChain).To(BeTrue())
+		Expect(foundLightningNode.Status.Runtime.NumActiveChannels).To(Equal(uint32(3)))
 	})
 
 	It("refuses to grant publisher access to an unrelated Secret", func() {
