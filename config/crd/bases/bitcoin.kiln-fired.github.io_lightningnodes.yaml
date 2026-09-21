@@ -34,35 +34,54 @@ spec:
               bitcoinConnection:
                 description: Configuration for the Bitcoin RPC client
                 properties:
-                  apiAuthSecretName:
-                    description: Name of the secret that contains bitcoin node RPC API credentials
-                    type: string
-                  apiPasswordSecretKey:
-                    description: Name of the secret key that contains bitcoin node RPC API password
-                    type: string
-                  apiUserSecretKey:
-                    description: Name of the secret key that contains bitcoin node RPC API username
-                    type: string
-                  certSecret:
-                    description: Name of the secret that contains TLS certificates for the RPC server
-                    type: string
-                  host:
-                    description: Hostname of the Bitcoin node RPC endpoint. Used when nodeRef is not set.
-                    type: string
-                  network:
-                    default: simnet
-                    description: Bitcoin network.
-                    enum:
-                    - simnet
-                    - testnet
-                    - regtest
-                    - signet
-                    - mainnet
-                    type: string
+                  external:
+                    description: Explicit connection to an externally managed btcd node.
+                    properties:
+                      apiAuthSecretName:
+                        description: Name of the Secret containing Bitcoin RPC API credentials.
+                        minLength: 1
+                        type: string
+                      apiPasswordSecretKey:
+                        description: Secret key containing the Bitcoin RPC password.
+                        minLength: 1
+                        type: string
+                      apiUserSecretKey:
+                        description: Secret key containing the Bitcoin RPC username.
+                        minLength: 1
+                        type: string
+                      certSecret:
+                        description: Name of the Secret containing the Bitcoin RPC TLS certificate.
+                        minLength: 1
+                        type: string
+                      host:
+                        description: Hostname of the externally managed Bitcoin RPC endpoint.
+                        minLength: 1
+                        type: string
+                      network:
+                        description: Bitcoin network used by the external backend.
+                        enum:
+                        - simnet
+                        - testnet
+                        - regtest
+                        - signet
+                        - mainnet
+                        type: string
+                    required:
+                    - apiAuthSecretName
+                    - apiPasswordSecretKey
+                    - apiUserSecretKey
+                    - certSecret
+                    - host
+                    - network
+                    type: object
                   nodeRef:
-                    description: Name of a BitcoinNode in the same namespace. When set, Kiln derives the RPC host and secret references from that resource.
+                    description: Name of a BitcoinNode in the same namespace. Kiln derives network, RPC endpoint, TLS Secret, and API credential Secret from the referenced node.
+                    minLength: 1
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: exactly one of nodeRef or external must be configured
+                  rule: (has(self.nodeRef) && !has(self.external)) || (!has(self.nodeRef) && has(self.external))
               image:
                 default:
                   lndImage: docker.io/lightninglabs/lnd:v0.21.0-beta

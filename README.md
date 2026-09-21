@@ -171,6 +171,30 @@ spec:
 
 Exactly one of `nodeRef` or `external` is allowed.
 
+## API reference model
+
+Kiln resources form a reference graph, not an ownership tree:
+
+```text
+BitcoinNode
+    ↑ nodeRef
+LightningNode
+    ↑ nodeRef
+LightningPeer
+    ↑ peerRef
+LightningChannel
+```
+
+References follow five rules:
+
+1. A resource references only its immediate first-class dependency.
+2. References are fixed-kind and same-namespace.
+3. References do not create Kubernetes ownership between Kiln CRs.
+4. Referenced-resource changes enqueue dependents through field indexes and watches.
+5. Deletion is blocked only when the protocol requires it. In particular, a `LightningPeer` cannot finish deletion while any `LightningChannel` still references it.
+
+Managed `LightningNode` resources derive Bitcoin network and RPC configuration from `bitcoinConnection.nodeRef`. External Bitcoin backends use the mutually exclusive `bitcoinConnection.external` form.
+
 ## Declarative Lightning peers
 
 `LightningPeer` represents durable desired connectivity, not a one-shot `lncli connect` command.
@@ -192,7 +216,7 @@ Kiln observes LND's active peer set before taking action. If the pubkey is alrea
 
 Status includes the observed connection address, whether the connection is inbound, and `NodeReady`, `Connected`, and `Ready` conditions.
 
-Deleting a `LightningPeer` requests a clean disconnect before its finalizer is released. LND does not allow a peer with active or pending channels to be disconnected, so deletion can remain pending until those channel dependencies are removed.
+Deleting a `LightningPeer` is explicitly blocked while any `LightningChannel` CR still references it. Once those channels are removed, Kiln requests a clean LND disconnect before releasing the peer finalizer.
 
 Peer reconciliation uses a separate LightningNode-owned internal credential Secret. The public RPC Secret remains limited to TLS, read-only, and invoice macaroons and never exposes `admin.macaroon`.
 
@@ -479,8 +503,6 @@ Implemented:
 
 Next areas under consideration:
 
-- invoice lifecycle
-- payment intent only where it can be modeled safely as durable desired state
 - external backup/recovery integration
 - stronger seed custody models
 - additional Bitcoin or Lightning implementations where real requirements justify the abstraction
