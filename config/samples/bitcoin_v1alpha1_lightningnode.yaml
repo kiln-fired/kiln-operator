@@ -5,7 +5,6 @@ metadata:
 spec:
   bitcoinConnection:
     nodeRef: btcd
-    network: simnet
   rpc:
     secretName: lnd-rpc
   wallet:
