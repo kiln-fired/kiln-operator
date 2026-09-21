@@ -13,7 +13,7 @@ trap 'rm -rf "$tmpdir"' EXIT
 dump_debug() {
   echo "::group::Kiln E2E debug"
   kubectl get pods,pvc,svc,secrets -A -o wide || true
-  kubectl get bitcoinnodes,lightningnodes,lightningpeers,seeds -A -o yaml || true
+  kubectl get bitcoinnodes,lightningnodes,lightningpeers,lightningchannels,seeds -A -o yaml || true
   kubectl get events -A --sort-by=.lastTimestamp | tail -100 || true
   kubectl logs -n kiln-operator-system deployment/kiln-operator-controller-manager --all-containers --tail=300 || true
   kubectl logs -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --tail=200 || true
