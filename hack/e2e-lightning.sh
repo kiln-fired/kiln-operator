@@ -303,8 +303,11 @@ alice_address="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --   ln
 [[ -n "$alice_address" && "$alice_address" != "null" ]]
 
 echo "Funding Alice's simnet wallet"
-mine_to_address 101 "$alice_address"
+mine_to_address 301 "$alice_address"
 wait_for_lightning_sync "$LIGHTNING_NODE"
+
+bitcoin_height="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')"
+(( bitcoin_height > 300 ))
 
 for i in {1..90}; do
   confirmed_balance="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --     lncli --network=simnet       --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009"       --tlscertpath=/data/tls.cert       --macaroonpath=/data/data/chain/bitcoin/simnet/admin.macaroon       walletbalance | jq -r '.confirmed_balance')"
