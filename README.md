@@ -16,7 +16,7 @@ The current implementation is intentionally focused rather than generic:
 Kiln currently optimizes for one thing: making a Bitcoin-backed LND node behave predictably under normal Kubernetes operations such as pod replacement, controller restart, rescheduling, and custom-resource deletion/recreation.
 
 > [!IMPORTANT]
-> Kiln is still under active development. The current work has concentrated on lifecycle safety and recovery. Mainnet requires explicit opt-in. Automated backups, seed custody, and declarative payment/channel APIs are not yet part of the supported contract.
+> Kiln is still under active development. The current work has concentrated on lifecycle safety and recovery. Mainnet requires explicit opt-in. Automated backups, stronger seed custody, and application-level payment or invoice APIs are not yet part of the supported contract.
 
 ## What Kiln manages
 

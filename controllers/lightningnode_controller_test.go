@@ -350,8 +350,16 @@ var _ = Describe("LightningNode controller", func() {
 
 	It("derives the Lightning network from its referenced BitcoinNode", func() {
 		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
-			ObjectMeta: metav1.ObjectMeta{Name: "bitcoin-mismatch", Namespace: Namespace},
-			Spec: bitcoinv1alpha1.BitcoinNodeSpec{Network: "testnet"},
+			ObjectMeta: metav1.ObjectMeta{Name: "bitcoin-testnet", Namespace: Namespace},
+			Spec: bitcoinv1alpha1.BitcoinNodeSpec{
+				Network: "testnet",
+				RPCServer: bitcoinv1alpha1.RPCServer{
+					CertSecret:           "bitcoin-testnet-tls",
+					ApiAuthSecretName:    "bitcoin-testnet-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
+				},
+			},
 		}
 		Expect(k8sClient.Create(ctx, bitcoinNode)).To(Succeed())
 		bitcoinNode.Status.Network = "testnet"
@@ -364,7 +372,7 @@ var _ = Describe("LightningNode controller", func() {
 		lightningNode := &bitcoinv1alpha1.LightningNode{
 			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
 			Spec: bitcoinv1alpha1.LightningNodeSpec{
-				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{NodeRef: "bitcoin-mismatch"},
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{NodeRef: "bitcoin-testnet"},
 			},
 		}
 		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())

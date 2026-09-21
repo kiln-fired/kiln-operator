@@ -493,6 +493,17 @@ func doLNDOperatorRequest(ctx context.Context, node *bitcoinv1alpha1.LightningNo
 	return nil
 }
 
+func (r *LightningPeerReconciler) mapLightningChannelToPeer(_ context.Context, obj client.Object) []ctrl.Request {
+	channel := obj.(*bitcoinv1alpha1.LightningChannel)
+	if channel.Spec.PeerRef == "" {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: types.NamespacedName{
+		Namespace: channel.Namespace,
+		Name:      channel.Spec.PeerRef,
+	}}}
+}
+
 func (r *LightningPeerReconciler) mapLightningNodeToPeers(ctx context.Context, obj client.Object) []ctrl.Request {
 	var peers bitcoinv1alpha1.LightningPeerList
 	if err := r.List(ctx, &peers,
@@ -523,5 +534,6 @@ func (r *LightningPeerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bitcoinv1alpha1.LightningPeer{}).
 		Watches(&bitcoinv1alpha1.LightningNode{}, handler.EnqueueRequestsFromMapFunc(r.mapLightningNodeToPeers)).
+		Watches(&bitcoinv1alpha1.LightningChannel{}, handler.EnqueueRequestsFromMapFunc(r.mapLightningChannelToPeer)).
 		Complete(r)
 }

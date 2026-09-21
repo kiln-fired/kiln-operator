@@ -61,7 +61,6 @@ spec:
                 x-kubernetes-validations:
                 - message: minConfs is immutable
                   rule: self == oldSelf
-                  rule: self == oldSelf
               peerRef:
                 description: Name of the LightningPeer that identifies the remote node.
                 minLength: 1
