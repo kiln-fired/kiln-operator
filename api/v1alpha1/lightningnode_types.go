@@ -21,34 +21,43 @@ import (
 )
 
 type LNDContainerImages struct {
-
 	// LND container image
-	// +kubebuilder:default="docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"
+	// +kubebuilder:default="docker.io/lightninglabs/lnd:v0.21.0-beta"
 	LndImage string `json:"lndImage,omitempty"`
 
 	// lnd-init container image
 	// +kubebuilder:default="docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"
-	LndInitImage string `json:"lndInitImage,omitemply"`
+	LndInitImage string `json:"lndInitImage,omitempty"`
 }
 
 type BitcoinConnection struct {
-	// Hostname of the Bitcoin node RPC endpoint
-	Host string `json:"host,omitEmpty"`
+	// Name of a BitcoinNode in the same namespace. When set, Kiln derives the
+	// RPC host and secret references from that resource.
+	// +optional
+	NodeRef string `json:"nodeRef,omitempty"`
+
+	// Hostname of the Bitcoin node RPC endpoint. Used when nodeRef is not set.
+	// +optional
+	Host string `json:"host,omitempty"`
 
 	// Bitcoin network, e.g. simnet, testnet, regressionnet, mainnet
 	// +kubebuilder:default="simnet"
-	Network string `json:"network,omitEmpty"`
+	Network string `json:"network,omitempty"`
 
 	// Name of the secret that contains TLS certificates for the RPC server
+	// +optional
 	CertSecret string `json:"certSecret,omitempty"`
 
 	// Name of the secret that contains bitcoin node RPC API credentials
-	ApiAuthSecretName string `json:"apiAuthSecretName,omiteempty"`
+	// +optional
+	ApiAuthSecretName string `json:"apiAuthSecretName,omitempty"`
 
 	// Name of the secret key that contains bitcoin node RPC API username
+	// +optional
 	ApiUserSecretKey string `json:"apiUserSecretKey,omitempty"`
 
 	// Name of the secret key that contains bitcoin node RPC API password
+	// +optional
 	ApiPasswordSecretKey string `json:"apiPasswordSecretKey,omitempty"`
 }
 
@@ -66,7 +75,7 @@ type SeedImport struct {
 
 	// Name of the secret key that contains the mnemonic seed
 	// +kubebuilder:default="mnemonic"
-	MnemonicKey string `json:"menomicKey,omitempty"`
+	MnemonicKey string `json:"mnemonicKey,omitempty"`
 
 	// Name of the secret key that contains the seed passphrase
 	// +kubebuilder:default="passphrase"
@@ -83,11 +92,8 @@ type Wallet struct {
 
 // LightningNodeSpec defines the desired state of LightningNode
 type LightningNodeSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// Container image overrides
-	// +kubebuilder:default={lndImage: "docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta", lndInitImage: "docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"}
+	// +kubebuilder:default={lndImage: "docker.io/lightninglabs/lnd:v0.21.0-beta", lndInitImage: "docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta"}
 	ContainerImages LNDContainerImages `json:"image,omitempty"`
 
 	// Configuration for the Bitcoin RPC client
@@ -99,8 +105,13 @@ type LightningNodeSpec struct {
 
 // LightningNodeStatus defines the observed state of LightningNode
 type LightningNodeStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Phase is a concise summary of the current lifecycle state.
+	// +optional
+	Phase string `json:"phase,omitempty"`
+
+	// Conditions summarize dependency, wallet, storage, and readiness state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 //+kubebuilder:object:root=true

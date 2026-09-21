@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.10.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   creationTimestamp: null
   name: lightningnodes.bitcoin.kiln-fired.github.io
 spec:
@@ -21,14 +21,10 @@ spec:
         description: LightningNode is the Schema for the lightningnodes API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: APIVersion defines the versioned schema of this representation of an object.
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: Kind is a string value representing the REST resource this object represents.
             type: string
           metadata:
             type: object
@@ -39,47 +35,42 @@ spec:
                 description: Configuration for the Bitcoin RPC client
                 properties:
                   apiAuthSecretName:
-                    description: Name of the secret that contains bitcoin node RPC
-                      API credentials
+                    description: Name of the secret that contains bitcoin node RPC API credentials
                     type: string
                   apiPasswordSecretKey:
-                    description: Name of the secret key that contains bitcoin node
-                      RPC API password
+                    description: Name of the secret key that contains bitcoin node RPC API password
                     type: string
                   apiUserSecretKey:
-                    description: Name of the secret key that contains bitcoin node
-                      RPC API username
+                    description: Name of the secret key that contains bitcoin node RPC API username
                     type: string
                   certSecret:
-                    description: Name of the secret that contains TLS certificates
-                      for the RPC server
+                    description: Name of the secret that contains TLS certificates for the RPC server
                     type: string
                   host:
-                    description: Hostname of the Bitcoin node RPC endpoint
+                    description: Hostname of the Bitcoin node RPC endpoint. Used when nodeRef is not set.
                     type: string
                   network:
                     default: simnet
-                    description: Bitcoin network, e.g. simnet, testnet, regressionnet,
-                      mainnet
+                    description: Bitcoin network, e.g. simnet, testnet, regressionnet, mainnet
                     type: string
-                required:
-                - apiAuthSecretName
-                - host
-                - network
+                  nodeRef:
+                    description: Name of a BitcoinNode in the same namespace. When set, Kiln derives the RPC host and secret references from that resource.
+                    type: string
                 type: object
               image:
+                default:
+                  lndImage: docker.io/lightninglabs/lnd:v0.21.0-beta
+                  lndInitImage: docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta
                 description: Container image overrides
                 properties:
                   lndImage:
-                    default: docker.io/lightninglabs/lndinit:v0.15.5-beta
+                    default: docker.io/lightninglabs/lnd:v0.21.0-beta
                     description: LND container image
                     type: string
                   lndInitImage:
-                    default: docker.io/lightninglabs/lndinit:v0.1.8-beta-lnd-v0.15.5-beta
+                    default: docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta
                     description: lnd-init container image
                     type: string
-                required:
-                - lndInitImage
                 type: object
               wallet:
                 description: Configuration for the wallet
@@ -88,36 +79,79 @@ spec:
                     description: Wallet password
                     properties:
                       secretKey:
-                        description: Name of the secret key that contains the wallet
-                          password
+                        description: Name of the secret key that contains the wallet password
                         type: string
                       secretName:
-                        description: Name of the secret that contains the Lightning
-                          wallet password
+                        description: Name of the secret that contains the Lightning wallet password
                         type: string
                     type: object
                   seed:
                     description: Seed to import to the wallet
                     properties:
-                      menomicKey:
+                      mnemonicKey:
                         default: mnemonic
-                        description: Name of the secret key that contains the mnemonic
-                          seed
+                        description: Name of the secret key that contains the mnemonic seed
                         type: string
                       passphraseKey:
                         default: passphrase
-                        description: Name of the secret key that contains the seed
-                          passphrase
+                        description: Name of the secret key that contains the seed passphrase
                         type: string
                       secretName:
-                        description: Name of the secret that contains the seed to
-                          import
+                        description: Name of the secret that contains the seed to import
                         type: string
                     type: object
                 type: object
             type: object
           status:
             description: LightningNodeStatus defines the observed state of LightningNode
+            properties:
+              conditions:
+                description: Conditions summarize dependency, wallet, storage, and readiness state.
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: lastTransitionTime is the last time the condition transitioned from one status to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message is a human readable message indicating details about the transition.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: observedGeneration represents the .metadata.generation that the condition was set based upon.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/)?(([A-Z]([a-z0-9]*[A-Z0-9])*)|([a-z0-9]([a-z0-9]*[A-Z0-9])*))$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              phase:
+                description: Phase is a concise summary of the current lifecycle state.
+                type: string
             type: object
         type: object
     served: true
