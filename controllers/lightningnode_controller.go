@@ -40,12 +40,16 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	bitcoinv1alpha1 "github.com/kiln-fired/kiln-operator/api/v1alpha1"
 )
 
-const lightningNodeFinalizer = "bitcoin.kiln-fired.github.io/lightning-stateful-cleanup"
+const (
+	lightningNodeFinalizer       = "bitcoin.kiln-fired.github.io/lightning-stateful-cleanup"
+	lightningNodeBitcoinRefIndex = "spec.bitcoinConnection.nodeRef"
+)
 
 // LightningNodeReconciler reconciles a LightningNode object
 type LightningNodeReconciler struct {
@@ -967,8 +971,37 @@ func labelsForLightningNode(name string) map[string]string {
 	return map[string]string{"app": "lightningnode", "lightningnode_cr": name}
 }
 
+func (r *LightningNodeReconciler) mapBitcoinNodeToLightningNodes(ctx context.Context, obj client.Object) []ctrl.Request {
+	var nodes bitcoinv1alpha1.LightningNodeList
+	if err := r.List(ctx, &nodes,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{lightningNodeBitcoinRefIndex: obj.GetName()},
+	); err != nil {
+		ctrllog.FromContext(ctx).Error(err, "unable to map BitcoinNode to LightningNodes")
+		return nil
+	}
+	requests := make([]ctrl.Request, 0, len(nodes.Items))
+	for i := range nodes.Items {
+		requests = append(requests, ctrl.Request{NamespacedName: types.NamespacedName{
+			Namespace: nodes.Items[i].Namespace,
+			Name:      nodes.Items[i].Name,
+		}})
+	}
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *LightningNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bitcoinv1alpha1.LightningNode{}, lightningNodeBitcoinRefIndex, func(obj client.Object) []string {
+		node := obj.(*bitcoinv1alpha1.LightningNode)
+		if node.Spec.BitcoinConnection.NodeRef == "" {
+			return nil
+		}
+		return []string{node.Spec.BitcoinConnection.NodeRef}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bitcoinv1alpha1.LightningNode{}).
 		Owns(&appsv1.StatefulSet{}).
@@ -977,5 +1010,6 @@ func (r *LightningNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&rbacv1.Role{}).
 		Owns(&rbacv1.RoleBinding{}).
+		Watches(&bitcoinv1alpha1.BitcoinNode{}, handler.EnqueueRequestsFromMapFunc(r.mapBitcoinNodeToLightningNodes)).
 		Complete(r)
 }

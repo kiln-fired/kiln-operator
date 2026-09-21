@@ -26,12 +26,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	bitcoinv1alpha1 "github.com/kiln-fired/kiln-operator/api/v1alpha1"
 )
 
-const lightningChannelFinalizer = "bitcoin.kiln-fired.github.io/channel-close"
+const (
+	lightningChannelFinalizer    = "bitcoin.kiln-fired.github.io/channel-close"
+	lightningChannelPeerRefIndex = "spec.peerRef"
+)
 
 type LightningChannelObservation struct {
 	State             string
@@ -649,8 +653,35 @@ func (r *LightningChannelReconciler) releaseLightningChannelFinalizer(ctx contex
 	return ctrl.Result{}, nil
 }
 
+func (r *LightningChannelReconciler) mapLightningPeerToChannels(ctx context.Context, obj client.Object) []ctrl.Request {
+	var channels bitcoinv1alpha1.LightningChannelList
+	if err := r.List(ctx, &channels,
+		client.InNamespace(obj.GetNamespace()),
+		client.MatchingFields{lightningChannelPeerRefIndex: obj.GetName()},
+	); err != nil {
+		ctrllog.FromContext(ctx).Error(err, "unable to map LightningPeer to LightningChannels")
+		return nil
+	}
+	requests := make([]ctrl.Request, 0, len(channels.Items))
+	for i := range channels.Items {
+		requests = append(requests, ctrl.Request{NamespacedName: types.NamespacedName{
+			Namespace: channels.Items[i].Namespace,
+			Name:      channels.Items[i].Name,
+		}})
+	}
+	return requests
+}
+
 func (r *LightningChannelReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bitcoinv1alpha1.LightningChannel{}, lightningChannelPeerRefIndex, func(obj client.Object) []string {
+		channel := obj.(*bitcoinv1alpha1.LightningChannel)
+		return []string{channel.Spec.PeerRef}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bitcoinv1alpha1.LightningChannel{}).
+		Watches(&bitcoinv1alpha1.LightningPeer{}, handler.EnqueueRequestsFromMapFunc(r.mapLightningPeerToChannels)).
 		Complete(r)
 }
