@@ -90,6 +90,13 @@ type Wallet struct {
 	Seed SeedImport `json:"seed,omitempty"`
 }
 
+type RPCPublishing struct {
+	// Name of the Secret that receives LND client credentials.
+	// Defaults to <lightningNode name>-rpc.
+	// +optional
+	SecretName string `json:"secretName,omitempty"`
+}
+
 // LightningNodeSpec defines the desired state of LightningNode
 type LightningNodeSpec struct {
 	// Container image overrides
@@ -101,6 +108,9 @@ type LightningNodeSpec struct {
 
 	// Configuration for the wallet
 	Wallet Wallet `json:"wallet,omitempty"`
+
+	// RPC client credential publishing configuration
+	RPC RPCPublishing `json:"rpc,omitempty"`
 }
 
 // LightningNodeStatus defines the observed state of LightningNode
@@ -109,7 +119,15 @@ type LightningNodeStatus struct {
 	// +optional
 	Phase string `json:"phase,omitempty"`
 
-	// Conditions summarize dependency, wallet, storage, and readiness state.
+	// Name of the Secret containing published LND client credentials.
+	// +optional
+	RPCSecretName string `json:"rpcSecretName,omitempty"`
+
+	// RPCAddress is the in-cluster LND RPC endpoint.
+	// +optional
+	RPCAddress string `json:"rpcAddress,omitempty"`
+
+	// Conditions summarize dependency, wallet, credential, storage, and readiness state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
