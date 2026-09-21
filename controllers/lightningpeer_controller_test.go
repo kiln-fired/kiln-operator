@@ -33,6 +33,7 @@ var _ = Describe("LightningPeer controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, node)).To(Succeed())
 		node.Status.Phase = "Ready"
+		node.Status.Runtime.SyncedToChain = true
 		node.Status.Conditions = []metav1.Condition{{
 			Type:               "Ready",
 			Status:             metav1.ConditionTrue,
@@ -196,4 +197,30 @@ var _ = Describe("LightningPeer controller", func() {
 			return errors.IsNotFound(err)
 		}, 10*time.Second, 100*time.Millisecond).Should(BeTrue())
 	})
+	It("waits for chain sync before attempting a peer connection", func() {
+		node := createReadyNode()
+		node.Status.Runtime.SyncedToChain = false
+		Expect(k8sClient.Status().Update(ctx, node)).To(Succeed())
+		createPeer()
+
+		connectCalls := 0
+		reconciler := LightningPeerReconciler{
+			Client: k8sClient,
+			Scheme: k8sClient.Scheme(),
+			ConnectPeer: func(context.Context, *bitcoinv1alpha1.LightningNode, *bitcoinv1alpha1.LightningPeer, *corev1.Secret) error {
+				connectCalls++
+				return nil
+			},
+		}
+
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: peerKey})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(connectCalls).To(BeZero())
+
+		found := &bitcoinv1alpha1.LightningPeer{}
+		Expect(k8sClient.Get(ctx, peerKey, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("WaitingForNode"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "NodeReady").Reason).To(Equal("LightningNodeChainNotSynced"))
+	})
+
 })
