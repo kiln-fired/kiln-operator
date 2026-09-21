@@ -161,8 +161,11 @@ var _ = Describe("BitcoinNode controller", func() {
 		Expect(*btcdContainer.SecurityContext.RunAsGroup).To(Equal(int64(65532)))
 		Expect(btcdContainer.LivenessProbe.Exec.Command).To(HaveLen(3))
 		Expect(btcdContainer.LivenessProbe.Exec.Command[0:2]).To(Equal([]string{"/bin/sh", "-c"}))
+		Expect(btcdContainer.LivenessProbe.Exec.Command[2]).To(ContainSubstring("--configfile=/dev/null"))
 		Expect(btcdContainer.ReadinessProbe.Exec.Command).To(HaveLen(3))
 		Expect(btcdContainer.ReadinessProbe.Exec.Command[0:2]).To(Equal([]string{"/bin/sh", "-c"}))
+		Expect(btcdContainer.ReadinessProbe.Exec.Command[2]).To(ContainSubstring("--configfile=/dev/null"))
+		Expect(btcdLifecycle.PreStop.Exec.Command[2]).To(ContainSubstring("--configfile=/dev/null"))
 
 		By("checking if the mining address is the expected secret reference")
 		Eventually(func() error {
