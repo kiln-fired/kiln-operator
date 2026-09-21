@@ -305,4 +305,68 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, foundLightningNode)).To(Succeed())
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "BitcoinReady").Reason).To(Equal("BitcoinNodeReady"))
 	})
+	It("blocks mainnet Lightning without explicit opt-in", func() {
+		lightningNode := &bitcoinv1alpha1.LightningNode{
+			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.LightningNodeSpec{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{
+					Host:                 "btcd",
+					Network:              "mainnet",
+					CertSecret:           "btcd-rpc-tls",
+					ApiAuthSecretName:    "btcd-rpc-creds",
+					ApiUserSecretKey:     "username",
+					ApiPasswordSecretKey: "password",
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
+		Expect(err).ToNot(HaveOccurred())
+
+		found := &bitcoinv1alpha1.LightningNode{}
+		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, found)).To(Succeed())
+		Expect(found.Status.Network).To(Equal("mainnet"))
+		Expect(found.Status.Phase).To(Equal("NetworkBlocked"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "NetworkReady").Reason).To(Equal("MainnetOptInRequired"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionFalse))
+
+		statefulSet := &appsv1.StatefulSet{}
+		err = k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("blocks a LightningNode whose network does not match its BitcoinNode", func() {
+		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
+			ObjectMeta: metav1.ObjectMeta{Name: "bitcoin-mismatch", Namespace: Namespace},
+			Spec: bitcoinv1alpha1.BitcoinNodeSpec{Network: "testnet"},
+		}
+		Expect(k8sClient.Create(ctx, bitcoinNode)).To(Succeed())
+		bitcoinNode.Status.Network = "testnet"
+		bitcoinNode.Status.Conditions = []metav1.Condition{{
+			Type: "Ready", Status: metav1.ConditionTrue, Reason: "RPCReady", LastTransitionTime: metav1.Now(),
+		}}
+		Expect(k8sClient.Status().Update(ctx, bitcoinNode)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, bitcoinNode) })
+
+		lightningNode := &bitcoinv1alpha1.LightningNode{
+			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.LightningNodeSpec{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{NodeRef: "bitcoin-mismatch", Network: "simnet"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
+		Expect(err).ToNot(HaveOccurred())
+
+		found := &bitcoinv1alpha1.LightningNode{}
+		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, found)).To(Succeed())
+		Expect(found.Status.Phase).To(Equal("NetworkBlocked"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "NetworkReady").Reason).To(Equal("NetworkMismatch"))
+		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Reason).To(Equal("NetworkMismatch"))
+
+		statefulSet := &appsv1.StatefulSet{}
+		err = k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
 })

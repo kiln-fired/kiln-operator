@@ -3,6 +3,7 @@ kind: BitcoinNode
 metadata:
   name: btcd
 spec:
+  network: simnet
   mining:
     cpuMiningEnabled: false
     rewardAddress:

@@ -21,6 +21,32 @@ dump_debug() {
 }
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then dump_debug; fi; rm -rf "$tmpdir"; exit $rc' EXIT
 
+wait_for_condition_status() {
+  local resource="$1"
+  local name="$2"
+  local condition="$3"
+  local expected="$4"
+  local attempts=60
+  for ((i=1; i<=attempts; i++)); do
+    local actual
+    actual="$(kubectl get "$resource" -n "$NAMESPACE" "$name" -o json 2>/dev/null | jq -r --arg condition "$condition" '.status.conditions[]? | select(.type == $condition) | .status' | tail -1)"
+    if [[ "$actual" == "$expected" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Timed out waiting for $resource/$name condition $condition=$expected" >&2
+  return 1
+}
+
+assert_no_statefulset() {
+  local name="$1"
+  if kubectl get statefulset -n "$NAMESPACE" "$name" >/dev/null 2>&1; then
+    echo "Unexpected StatefulSet $name exists" >&2
+    return 1
+  fi
+}
+
 wait_for_secret_keys() {
   local secret="$1"
   local attempts=90
@@ -116,6 +142,37 @@ assert_same_pubkey() {
 
 kubectl create namespace "$NAMESPACE"
 
+cat >"$tmpdir/mainnet-blocked-bitcoin.yaml" <<EOF
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: BitcoinNode
+metadata:
+  name: blocked-mainnet-bitcoin
+  namespace: $NAMESPACE
+spec:
+  network: mainnet
+EOF
+kubectl apply -f "$tmpdir/mainnet-blocked-bitcoin.yaml"
+wait_for_condition_status bitcoinnode blocked-mainnet-bitcoin NetworkReady False
+assert_no_statefulset blocked-mainnet-bitcoin
+[[ "$(kubectl get bitcoinnode -n "$NAMESPACE" blocked-mainnet-bitcoin -o jsonpath='{.status.network}')" == "mainnet" ]]
+kubectl delete -f "$tmpdir/mainnet-blocked-bitcoin.yaml" --wait=true --timeout=60s
+
+cat >"$tmpdir/mainnet-blocked-lightning.yaml" <<EOF
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: LightningNode
+metadata:
+  name: blocked-mainnet-lightning
+  namespace: $NAMESPACE
+spec:
+  bitcoinConnection:
+    network: mainnet
+EOF
+kubectl apply -f "$tmpdir/mainnet-blocked-lightning.yaml"
+wait_for_condition_status lightningnode blocked-mainnet-lightning NetworkReady False
+assert_no_statefulset blocked-mainnet-lightning
+[[ "$(kubectl get lightningnode -n "$NAMESPACE" blocked-mainnet-lightning -o jsonpath='{.status.network}')" == "mainnet" ]]
+kubectl delete -f "$tmpdir/mainnet-blocked-lightning.yaml" --wait=true --timeout=60s
+
 openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_NODE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_NODE,DNS:$BITCOIN_NODE.$NAMESPACE.svc,DNS:$BITCOIN_NODE.$NAMESPACE.svc.cluster.local"
 
 kubectl create secret generic btcd-rpc-tls -n "$NAMESPACE"   --from-file=tls.crt="$tmpdir/btcd.crt"   --from-file=tls.key="$tmpdir/btcd.key"   --from-file=ca.crt="$tmpdir/btcd.crt"
@@ -145,6 +202,23 @@ write_lightning_manifest
 
 kubectl apply -f "$tmpdir/bitcoin.yaml"
 kubectl wait -n "$NAMESPACE" bitcoinnode/"$BITCOIN_NODE" --for=condition=Ready --timeout=180s
+[[ "$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.network}')" == "simnet" ]]
+
+cat >"$tmpdir/network-mismatch-lightning.yaml" <<EOF
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: LightningNode
+metadata:
+  name: mismatched-lightning
+  namespace: $NAMESPACE
+spec:
+  bitcoinConnection:
+    nodeRef: $BITCOIN_NODE
+    network: testnet
+EOF
+kubectl apply -f "$tmpdir/network-mismatch-lightning.yaml"
+wait_for_condition_status lightningnode mismatched-lightning NetworkReady False
+assert_no_statefulset mismatched-lightning
+kubectl delete -f "$tmpdir/network-mismatch-lightning.yaml" --wait=true --timeout=60s
 
 kubectl apply -f "$tmpdir/lightning.yaml"
 kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=240s
@@ -152,8 +226,10 @@ wait_for_secret_keys lnd-rpc
 
 rpc_address="$(kubectl get lightningnode -n "$NAMESPACE" "$LIGHTNING_NODE" -o jsonpath='{.status.rpcAddress}')"
 rpc_secret="$(kubectl get lightningnode -n "$NAMESPACE" "$LIGHTNING_NODE" -o jsonpath='{.status.rpcSecretName}')"
+network="$(kubectl get lightningnode -n "$NAMESPACE" "$LIGHTNING_NODE" -o jsonpath='{.status.network}')"
 [[ "$rpc_address" == "$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" ]]
 [[ "$rpc_secret" == "lnd-rpc" ]]
+[[ "$network" == "simnet" ]]
 
 recreate_client
 initial_pubkey="$(get_pubkey)"

@@ -51,7 +51,13 @@ spec:
                     type: string
                   network:
                     default: simnet
-                    description: Bitcoin network, e.g. simnet, testnet, regressionnet, mainnet
+                    description: Bitcoin network.
+                    enum:
+                    - simnet
+                    - testnet
+                    - regtest
+                    - signet
+                    - mainnet
                     type: string
                   nodeRef:
                     description: Name of a BitcoinNode in the same namespace. When set, Kiln derives the RPC host and secret references from that resource.
@@ -78,6 +84,14 @@ spec:
                   secretName:
                     description: Name of the Secret that receives LND client credentials. Defaults to <lightningNode name>-rpc.
                     type: string
+                type: object
+              safety:
+                description: Safety policy for network-sensitive behavior.
+                properties:
+                  allowMainnet:
+                    default: false
+                    description: AllowMainnet must be explicitly set to true before Kiln will start a mainnet node.
+                    type: boolean
                 type: object
               wallet:
                 description: Configuration for the wallet
@@ -156,6 +170,9 @@ spec:
                   - type
                   type: object
                 type: array
+              network:
+                description: Network is the resolved Bitcoin network used by LND.
+                type: string
               phase:
                 description: Phase is a concise summary of the current lifecycle state.
                 type: string
