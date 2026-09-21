@@ -105,7 +105,7 @@ var _ = Describe("BitcoinNode controller", func() {
 		Expect(foundStatefulSet.Spec.Template.Spec.Containers).To(HaveLen(2))
 		btcdContainer := foundStatefulSet.Spec.Template.Spec.Containers[0]
 		Expect(btcdContainer.Name).To(Equal("btcd"))
-		Expect(btcdContainer.Image).To(Equal("btcsuite/btcd:v0.26.2"))
+		Expect(btcdContainer.Image).To(Equal("ghcr.io/btcsuite/btcd:v0.26.2"))
 		Expect(btcdContainer.Command).To(Equal([]string{"btcd"}))
 		Expect(btcdContainer.Args).To(ContainElements(
 			"--simnet",
