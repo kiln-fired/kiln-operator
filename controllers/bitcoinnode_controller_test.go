@@ -101,6 +101,16 @@ var _ = Describe("BitcoinNode controller", func() {
 			return k8sClient.Get(ctx, statefulSetNamespaceName, foundStatefulSet)
 		}, time.Minute, time.Second).Should(Succeed())
 
+		By("checking stateful safety defaults")
+		Expect(foundStatefulSet.Spec.UpdateStrategy.Type).To(Equal(appsv1.OnDeleteStatefulSetStrategyType))
+		Expect(foundStatefulSet.Spec.PersistentVolumeClaimRetentionPolicy).ToNot(BeNil())
+		Expect(foundStatefulSet.Spec.PersistentVolumeClaimRetentionPolicy.WhenDeleted).To(Equal(appsv1.RetainPersistentVolumeClaimRetentionPolicyType))
+		Expect(foundStatefulSet.Spec.PersistentVolumeClaimRetentionPolicy.WhenScaled).To(Equal(appsv1.RetainPersistentVolumeClaimRetentionPolicyType))
+		Expect(foundStatefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds).ToNot(BeNil())
+		Expect(*foundStatefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(60)))
+		Expect(foundStatefulSet.Spec.VolumeClaimTemplates).To(HaveLen(1))
+		Expect(foundStatefulSet.Spec.VolumeClaimTemplates[0].Spec.AccessModes).To(Equal([]corev1.PersistentVolumeAccessMode{corev1.ReadWriteOncePod}))
+
 		By("checking the upstream btcd runtime configuration")
 		Expect(foundStatefulSet.Spec.Template.Spec.Containers).To(HaveLen(2))
 		btcdContainer := foundStatefulSet.Spec.Template.Spec.Containers[0]
