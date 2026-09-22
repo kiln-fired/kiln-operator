@@ -232,7 +232,7 @@ assert_no_statefulset blocked-mainnet-lightning-lightning
 kubectl delete -f "$tmpdir/mainnet-blocked-lightning.yaml" --wait=true --timeout=60s
 kubectl delete -f "$tmpdir/mainnet-blocked-bitcoin.yaml" --wait=true --timeout=60s
 
-openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_NODE,DNS:$BITCOIN_NODE.$NAMESPACE.svc,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_RESOURCE,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"
 
 kubectl create secret generic btcd-rpc-tls -n "$NAMESPACE"   --from-file=tls.crt="$tmpdir/btcd.crt"   --from-file=tls.key="$tmpdir/btcd.key"   --from-file=ca.crt="$tmpdir/btcd.crt"
 kubectl create secret generic btcd-rpc-creds -n "$NAMESPACE"   --from-literal=username=kiln   --from-literal=password=kiln-e2e-password
@@ -494,7 +494,7 @@ recreate_client
 assert_same_pubkey "$initial_pubkey"
 
 echo "Deleting and recreating LightningNode while retaining its PVC"
-pvc_name="lnd-data-$LIGHTNING_NODE-0"
+pvc_name="lnd-data-$LIGHTNING_RESOURCE-0"
 pvc_uid_before="$(kubectl get pvc -n "$NAMESPACE" "$pvc_name" -o jsonpath='{.metadata.uid}')"
 kubectl delete pod -n "$NAMESPACE" "$CLIENT_POD" --ignore-not-found --wait=true
 kubectl delete -f "$tmpdir/lightning.yaml" --wait=true --timeout=180s
