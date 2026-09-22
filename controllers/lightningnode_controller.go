@@ -311,6 +311,28 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	credentialsReady := len(rpcSecret.Data["tls.cert"]) > 0 &&
 		len(rpcSecret.Data["readonly.macaroon"]) > 0 &&
 		len(rpcSecret.Data["invoice.macaroon"]) > 0
+
+	backupSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: lightningBackupSecretName(lightningNode), Namespace: lightningNode.Namespace}, backupSecret); err != nil {
+		return ctrl.Result{}, err
+	}
+	if len(backupSecret.Data["channel.backup"]) > 0 {
+		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+			Type:               "BackupReady",
+			Status:             metav1.ConditionTrue,
+			Reason:             "StaticChannelBackupPublished",
+			Message:            "LND static channel backup is published to the retained backup Secret",
+			ObservedGeneration: lightningNode.Generation,
+		})
+	} else {
+		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
+			Type:               "BackupReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             "StaticChannelBackupPending",
+			Message:            "Waiting for LND to produce and publish channel.backup",
+			ObservedGeneration: lightningNode.Generation,
+		})
+	}
 	if !credentialsReady {
 		lightningNode.Status.Phase = "PublishingCredentials"
 		meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
@@ -556,6 +578,10 @@ func lightningOperatorRPCSecretName(l *bitcoinv1alpha1.LightningNode) string {
 	return derivedLightningName(l.Name, "-operator-rpc")
 }
 
+func lightningBackupSecretName(l *bitcoinv1alpha1.LightningNode) string {
+	return derivedLightningName(l.Name, "-scb")
+}
+
 func derivedLightningName(name, suffix string) string {
 	const maxNameLength = 253
 	if len(name)+len(suffix) <= maxNameLength {
@@ -621,6 +647,33 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 		return err
 	}
 
+	backupSecretName := lightningBackupSecretName(l)
+	backupSecret := &corev1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: backupSecretName, Namespace: l.Namespace}, backupSecret)
+	if errors.IsNotFound(err) {
+		backupSecret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      backupSecretName,
+				Namespace: l.Namespace,
+				Labels:    labelsForLightningNode(l.Name),
+				Annotations: map[string]string{
+					"bitcoin.kiln-fired.github.io/backup-for": l.Name,
+					"bitcoin.kiln-fired.github.io/retained":   "true",
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+		}
+		// Deliberately do not set an owner reference. The SCB is a recovery
+		// artifact and must survive deletion/recreation of the LightningNode.
+		if err := r.Create(ctx, backupSecret); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	} else if backupSecret.Annotations["bitcoin.kiln-fired.github.io/backup-for"] != l.Name {
+		return fmt.Errorf("Secret %s already exists and is not a retained backup for LightningNode %s", backupSecretName, l.Name)
+	}
+
 	serviceAccount := &corev1.ServiceAccount{}
 	err = r.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: l.Namespace}, serviceAccount)
 	if errors.IsNotFound(err) {
@@ -645,7 +698,7 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 			Rules: []rbacv1.PolicyRule{{
 				APIGroups:     []string{""},
 				Resources:     []string{"secrets"},
-				ResourceNames: []string{secretName, operatorSecretName},
+				ResourceNames: []string{secretName, operatorSecretName, backupSecretName},
 				Verbs:         []string{"get", "update", "patch"},
 			}},
 		}
@@ -719,6 +772,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 	publisherName := lightningRPCPublisherName(l)
 	rpcSecretName := lightningRPCSecretName(l)
 	operatorRPCSecretName := lightningOperatorRPCSecretName(l)
+	backupSecretName := lightningBackupSecretName(l)
 
 	lnd := corev1.Container{
 		Image:   lndImage,
@@ -807,11 +861,15 @@ while true; do
   READONLY=/data/data/chain/bitcoin/$NETWORK/readonly.macaroon
   INVOICE=/data/data/chain/bitcoin/$NETWORK/invoice.macaroon
   ADMIN=/data/data/chain/bitcoin/$NETWORK/admin.macaroon
+  SCB=/data/data/chain/bitcoin/$NETWORK/channel.backup
   if [ -s "$CERT" ] && [ -s "$READONLY" ] && [ -s "$INVOICE" ]; then
     lndinit -v store-secret --batch --overwrite --target=k8s       --k8s.namespace="$POD_NAMESPACE"       --k8s.secret-name="$RPC_SECRET_NAME"       "$CERT" "$READONLY" "$INVOICE"
   fi
   if [ -s "$CERT" ] && [ -s "$ADMIN" ]; then
     lndinit -v store-secret --batch --overwrite --target=k8s       --k8s.namespace="$POD_NAMESPACE"       --k8s.secret-name="$OPERATOR_RPC_SECRET_NAME"       "$CERT" "$ADMIN"
+  fi
+  if [ -s "$SCB" ]; then
+    lndinit -v store-secret --batch --overwrite --target=k8s       --k8s.namespace="$POD_NAMESPACE"       --k8s.secret-name="$BACKUP_SECRET_NAME"       "$SCB"
   fi
   sleep 30
 done
@@ -820,6 +878,7 @@ done
 			{Name: "NETWORK", Value: network},
 			{Name: "RPC_SECRET_NAME", Value: rpcSecretName},
 			{Name: "OPERATOR_RPC_SECRET_NAME", Value: operatorRPCSecretName},
+			{Name: "BACKUP_SECRET_NAME", Value: backupSecretName},
 			{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
 		},
 		SecurityContext: &corev1.SecurityContext{
