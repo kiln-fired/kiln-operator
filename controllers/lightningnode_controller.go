@@ -54,8 +54,9 @@ const (
 // LightningNodeReconciler reconciles a LightningNode object
 type LightningNodeReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	GetInfo func(context.Context, *bitcoinv1alpha1.LightningNode, *corev1.Secret) (*bitcoinv1alpha1.LightningRuntimeStatus, error)
+	APIReader client.Reader
+	Scheme    *runtime.Scheme
+	GetInfo   func(context.Context, *bitcoinv1alpha1.LightningNode, *corev1.Secret) (*bitcoinv1alpha1.LightningRuntimeStatus, error)
 }
 
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes,verbs=get;list;watch;create;update;patch;delete
