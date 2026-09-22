@@ -50,9 +50,6 @@ spec:
                     description: Name of the secret that contains the seed to import
                     type: string
                 type: object
-                x-kubernetes-validations:
-                - message: import is immutable
-                  rule: self == oldSelf
               network:
                 default: simnet
                 description: Bitcoin network used to derive the root key.
@@ -60,20 +57,16 @@ spec:
                 - simnet
                 - mainnet
                 type: string
-                x-kubernetes-validations:
-                - message: network is immutable
-                  rule: self == oldSelf
               secretName:
                 description: Name of the retained Secret that stores generated/imported seed material.
                 minLength: 1
                 type: string
-                x-kubernetes-validations:
-                - message: secretName is immutable
-                  rule: self == oldSelf
             required:
             - secretName
             type: object
             x-kubernetes-validations:
+            - message: seed configuration is immutable
+              rule: self == oldSelf
             - message: import Secret must differ from output secretName
               rule: '!has(self.import) || self.import.secretName != self.secretName'
           status:
