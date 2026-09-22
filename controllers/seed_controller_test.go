@@ -28,7 +28,6 @@ var _ = Describe("Seed controller", func() {
 	ctx := context.Background()
 	seedKey := types.NamespacedName{Namespace: Namespace, Name: SeedName}
 	secretKey := types.NamespacedName{Namespace: Namespace, Name: SecretName}
-	importKey := types.NamespacedName{Namespace: Namespace, Name: ImportSecretName}
 
 	reconcileSeed := func() {
 		reconciler := SeedReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
