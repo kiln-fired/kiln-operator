@@ -19,22 +19,20 @@ package v1alpha1
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // SeedSpec defines the desired state of Seed
+// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="seed configuration is immutable"
 type SeedSpec struct {
 	// Name of the retained Secret that stores generated/imported seed material.
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="secretName is immutable"
 	SecretName string `json:"secretName"`
 
 	// Optional Secret reference containing aezeed mnemonic and passphrase input.
 	// When omitted, Kiln generates new seed material.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="import is immutable"
 	Import *SeedImport `json:"import,omitempty"`
 
 	// Bitcoin network used to derive the root key.
 	// +kubebuilder:default="simnet"
 	// +kubebuilder:validation:Enum=simnet;mainnet
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="network is immutable"
 	Network string `json:"network,omitempty"`
 }
 
