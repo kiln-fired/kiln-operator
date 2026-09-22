@@ -55,10 +55,14 @@ func legacyPVCMatches(pvc *corev1.PersistentVolumeClaim, app, labelKey, resource
 }
 
 func (r *BitcoinNodeReconciler) ownedResourceName(ctx context.Context, b *bitcoinv1alpha1.BitcoinNode) (string, error) {
-	return resolveBitcoinNodeOwnedResourceName(ctx, r.Client, b)
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+	return resolveBitcoinNodeOwnedResourceName(ctx, r.Client, reader, b)
 }
 
-func resolveBitcoinNodeOwnedResourceName(ctx context.Context, k8sClient client.Client, b *bitcoinv1alpha1.BitcoinNode) (string, error) {
+func resolveBitcoinNodeOwnedResourceName(ctx context.Context, k8sClient client.Client, apiReader client.Reader, b *bitcoinv1alpha1.BitcoinNode) (string, error) {
 	typed := bitcoinNodeOwnedResourceName(b.Name)
 
 	current := &appsv1.StatefulSet{}
@@ -86,7 +90,7 @@ func resolveBitcoinNodeOwnedResourceName(ctx context.Context, k8sClient client.C
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{}
-	err = k8sClient.Get(ctx, types.NamespacedName{Name: "btcd-data-" + b.Name + "-0", Namespace: b.Namespace}, pvc)
+	err = apiReader.Get(ctx, types.NamespacedName{Name: "btcd-data-" + b.Name + "-0", Namespace: b.Namespace}, pvc)
 	if err == nil && legacyPVCMatches(pvc, "bitcoinnode", "bitcoinnode_cr", b.Name) {
 		return b.Name, nil
 	}
@@ -97,6 +101,10 @@ func resolveBitcoinNodeOwnedResourceName(ctx context.Context, k8sClient client.C
 }
 
 func (r *LightningNodeReconciler) ownedResourceName(ctx context.Context, l *bitcoinv1alpha1.LightningNode) (string, error) {
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
 	typed := lightningNodeOwnedResourceName(l.Name)
 
 	current := &appsv1.StatefulSet{}
@@ -124,7 +132,7 @@ func (r *LightningNodeReconciler) ownedResourceName(ctx context.Context, l *bitc
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{}
-	err = r.Get(ctx, types.NamespacedName{Name: "lnd-data-" + l.Name + "-0", Namespace: l.Namespace}, pvc)
+	err = reader.Get(ctx, types.NamespacedName{Name: "lnd-data-" + l.Name + "-0", Namespace: l.Namespace}, pvc)
 	if err == nil && legacyPVCMatches(pvc, "lightningnode", "lightningnode_cr", l.Name) {
 		return l.Name, nil
 	}
