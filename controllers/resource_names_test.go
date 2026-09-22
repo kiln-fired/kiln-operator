@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,6 +33,28 @@ var _ = Describe("owned resource naming", func() {
 		Expect(lightningName).To(HaveSuffix("-lightning"))
 		Expect(bitcoinName).To(Equal(bitcoinNodeOwnedResourceName(name)))
 		Expect(lightningName).To(Equal(lightningNodeOwnedResourceName(name)))
+	})
+
+	It("rejects a child resource controlled by a different owner", func() {
+		node := &bitcoinv1alpha1.BitcoinNode{
+			ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "test", UID: types.UID("expected-uid")},
+		}
+		controller := true
+		statefulSet := &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      bitcoinNodeOwnedResourceName("shared"),
+				Namespace: "test",
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "bitcoin.kiln-fired.github.io/v1alpha1",
+					Kind:       "LightningNode",
+					Name:       "shared",
+					UID:        types.UID("different-uid"),
+					Controller: &controller,
+				}},
+			},
+		}
+
+		Expect(controlledBy(statefulSet, node, "StatefulSet")).To(MatchError(ContainSubstring("controlled by a different resource")))
 	})
 
 	It("preserves legacy Bitcoin naming when a retained legacy PVC exists", func() {
