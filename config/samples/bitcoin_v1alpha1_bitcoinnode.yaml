@@ -4,6 +4,9 @@ metadata:
   name: btcd
 spec:
   network: simnet
+  storage:
+    size: 20Gi
+    # storageClassName: fast-storage
   mining:
     cpuMiningEnabled: false
     rewardAddress:
