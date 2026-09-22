@@ -133,7 +133,7 @@ Kiln publishes `mnemonic`, `passphrase`, and the derived `rootkey` only into the
 
 Existing pre-hardening Seed Secrets that are still controller-owned are migrated in place: Kiln removes the old owner reference, adds the retained-seed marker, and preserves the secret bytes.
 
-`Seed.status.conditions` reports `Ready` and `SecretReady`. Invalid mnemonic/passphrase input, missing import Secrets, and target Secret collisions are reported with non-sensitive reasons and messages.
+`Seed.status.conditions` reports `Ready` and `SecretReady`. Invalid mnemonic/passphrase input, missing import Secrets, and target Secret collisions are reported with non-sensitive reasons and messages. If a previously ready generated Seed Secret is deleted, Kiln reports `SeedMaterialLost` rather than silently generating a different identity. Imported seed output can be republished from its source Secret.
 
 ## Lightning lifecycle contract
 
