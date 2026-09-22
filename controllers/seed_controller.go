@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	bitcoinv1alpha1 "github.com/kiln-fired/kiln-operator/api/v1alpha1"
@@ -241,8 +242,28 @@ func labelsForSeed(name string) map[string]string {
 	return map[string]string{"app": "seed", "seed_cr": name}
 }
 
+func (r *SeedReconciler) mapSecretToSeeds(ctx context.Context, obj client.Object) []ctrl.Request {
+	var seeds bitcoinv1alpha1.SeedList
+	if err := r.List(ctx, &seeds, client.InNamespace(obj.GetNamespace())); err != nil {
+		ctrllog.FromContext(ctx).Error(err, "unable to map Secret to Seeds")
+		return nil
+	}
+	requests := make([]ctrl.Request, 0)
+	for i := range seeds.Items {
+		seed := &seeds.Items[i]
+		if seed.Spec.Import != nil && seed.Spec.Import.SecretName == obj.GetName() {
+			requests = append(requests, ctrl.Request{NamespacedName: types.NamespacedName{
+				Namespace: seed.Namespace,
+				Name:      seed.Name,
+			}})
+		}
+	}
+	return requests
+}
+
 func (r *SeedReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&bitcoinv1alpha1.Seed{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToSeeds)).
 		Complete(r)
 }
