@@ -92,9 +92,14 @@ spec:
                 - signet
                 - mainnet
                 type: string
-              peer:
-                description: Host and port of peer to connect
-                type: string
+              peers:
+                description: Persistent Bitcoin peers Kiln should manage as a desired set. Unrelated persistent peers added outside Kiln are left untouched.
+                items:
+                  minLength: 1
+                  type: string
+                maxItems: 64
+                type: array
+                uniqueItems: true
               storage:
                 default:
                   size: 2Gi
@@ -237,6 +242,11 @@ spec:
                   - status
                   - type
                   type: object
+                type: array
+              managedPeers:
+                description: ManagedPeers records the persistent peers currently managed by Kiln.
+                items:
+                  type: string
                 type: array
               network:
                 description: Network is the resolved Bitcoin network.
