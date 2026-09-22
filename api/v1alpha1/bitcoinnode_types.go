@@ -127,6 +127,7 @@ type BitcoinNodeSpec struct {
 	// Unrelated persistent peers added outside Kiln are left untouched.
 	// +optional
 	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:UniqueItems=true
 	// +kubebuilder:validation:items:MinLength=1
 	Peers []string `json:"peers,omitempty"`
 
