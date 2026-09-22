@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -51,11 +52,11 @@ func legacyPVCMatches(pvc *corev1.PersistentVolumeClaim, app, labelKey, resource
 	return pvc.Labels["app"] == app && pvc.Labels[labelKey] == resourceName
 }
 
-func (r *BitcoinNodeReconciler) ownedResourceName(ctx client.ObjectKey, b *bitcoinv1alpha1.BitcoinNode) (string, error) {
+func (r *BitcoinNodeReconciler) ownedResourceName(ctx context.Context, b *bitcoinv1alpha1.BitcoinNode) (string, error) {
 	typed := bitcoinNodeOwnedResourceName(b.Name)
 
 	current := &appsv1.StatefulSet{}
-	err := r.Get(contextForObjectKey(ctx), types.NamespacedName{Name: typed, Namespace: b.Namespace}, current)
+	err := r.Get(ctx, types.NamespacedName{Name: typed, Namespace: b.Namespace}, current)
 	if err == nil {
 		if err := controlledBy(current, b, "StatefulSet"); err != nil {
 			return "", err
@@ -67,7 +68,7 @@ func (r *BitcoinNodeReconciler) ownedResourceName(ctx client.ObjectKey, b *bitco
 	}
 
 	legacy := &appsv1.StatefulSet{}
-	err = r.Get(contextForObjectKey(ctx), types.NamespacedName{Name: b.Name, Namespace: b.Namespace}, legacy)
+	err = r.Get(ctx, types.NamespacedName{Name: b.Name, Namespace: b.Namespace}, legacy)
 	if err == nil {
 		if err := controlledBy(legacy, b, "StatefulSet"); err != nil {
 			return "", err
@@ -79,7 +80,7 @@ func (r *BitcoinNodeReconciler) ownedResourceName(ctx client.ObjectKey, b *bitco
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{}
-	err = r.Get(contextForObjectKey(ctx), types.NamespacedName{Name: "btcd-data-" + b.Name + "-0", Namespace: b.Namespace}, pvc)
+	err = r.Get(ctx, types.NamespacedName{Name: "btcd-data-" + b.Name + "-0", Namespace: b.Namespace}, pvc)
 	if err == nil && legacyPVCMatches(pvc, "bitcoinnode", "bitcoinnode_cr", b.Name) {
 		return b.Name, nil
 	}
@@ -89,11 +90,11 @@ func (r *BitcoinNodeReconciler) ownedResourceName(ctx client.ObjectKey, b *bitco
 	return typed, nil
 }
 
-func (r *LightningNodeReconciler) ownedResourceName(ctx client.ObjectKey, l *bitcoinv1alpha1.LightningNode) (string, error) {
+func (r *LightningNodeReconciler) ownedResourceName(ctx context.Context, l *bitcoinv1alpha1.LightningNode) (string, error) {
 	typed := lightningNodeOwnedResourceName(l.Name)
 
 	current := &appsv1.StatefulSet{}
-	err := r.Get(contextForObjectKey(ctx), types.NamespacedName{Name: typed, Namespace: l.Namespace}, current)
+	err := r.Get(ctx, types.NamespacedName{Name: typed, Namespace: l.Namespace}, current)
 	if err == nil {
 		if err := controlledBy(current, l, "StatefulSet"); err != nil {
 			return "", err
@@ -105,7 +106,7 @@ func (r *LightningNodeReconciler) ownedResourceName(ctx client.ObjectKey, l *bit
 	}
 
 	legacy := &appsv1.StatefulSet{}
-	err = r.Get(contextForObjectKey(ctx), types.NamespacedName{Name: l.Name, Namespace: l.Namespace}, legacy)
+	err = r.Get(ctx, types.NamespacedName{Name: l.Name, Namespace: l.Namespace}, legacy)
 	if err == nil {
 		if err := controlledBy(legacy, l, "StatefulSet"); err != nil {
 			return "", err
@@ -117,7 +118,7 @@ func (r *LightningNodeReconciler) ownedResourceName(ctx client.ObjectKey, l *bit
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{}
-	err = r.Get(contextForObjectKey(ctx), types.NamespacedName{Name: "lnd-data-" + l.Name + "-0", Namespace: l.Namespace}, pvc)
+	err = r.Get(ctx, types.NamespacedName{Name: "lnd-data-" + l.Name + "-0", Namespace: l.Namespace}, pvc)
 	if err == nil && legacyPVCMatches(pvc, "lightningnode", "lightningnode_cr", l.Name) {
 		return l.Name, nil
 	}
