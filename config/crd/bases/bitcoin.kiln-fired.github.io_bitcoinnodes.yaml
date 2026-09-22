@@ -108,16 +108,13 @@ spec:
                     description: Size is the requested capacity for the Bitcoin data volume.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
-                    x-kubernetes-validations:
-                    - message: storage size is immutable
-                      rule: self == oldSelf
                   storageClassName:
                     description: StorageClassName selects the Kubernetes StorageClass used for the Bitcoin data volume. When omitted, the cluster default StorageClass is used.
                     type: string
-                    x-kubernetes-validations:
-                    - message: storage class is immutable
-                      rule: self == oldSelf
                 type: object
+                x-kubernetes-validations:
+                - message: storage configuration is immutable
+                  rule: self == oldSelf
               resources:
                 default:
                   limits:
