@@ -7,6 +7,9 @@ spec:
   storage:
     size: 20Gi
     # storageClassName: fast-storage
+  peers:
+    - bitcoin-peer-a.example.com:8333
+    - bitcoin-peer-b.example.com:8333
   mining:
     cpuMiningEnabled: false
     rewardAddress:
