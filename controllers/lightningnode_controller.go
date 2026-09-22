@@ -267,6 +267,21 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
+	} else {
+		desiredStatefulSet := r.statefulsetForLightningNode(lightningNode, connection)
+		if desiredStatefulSet == nil {
+			return ctrl.Result{}, fmt.Errorf("unable to build desired Lightning StatefulSet")
+		}
+		updated, err := reconcileLightningPublisherTemplate(foundStatefulSet, desiredStatefulSet)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if updated {
+			if err := r.Update(ctx, foundStatefulSet); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
 	}
 
 	foundService := &corev1.Service{}
@@ -714,6 +729,19 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 		return err
 	} else if err := ensureControlledByLightningNode(role, l, "Role"); err != nil {
 		return err
+	} else {
+		desiredRules := []rbacv1.PolicyRule{{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{secretName, operatorSecretName, backupSecretName},
+			Verbs:         []string{"get", "update", "patch"},
+		}}
+		if !policyRulesEqual(role.Rules, desiredRules) {
+			role.Rules = desiredRules
+			if err := r.Update(ctx, role); err != nil {
+				return err
+			}
+		}
 	}
 
 	roleBinding := &rbacv1.RoleBinding{}
@@ -745,6 +773,94 @@ func (r *LightningNodeReconciler) ensureRPCPublishingResources(ctx context.Conte
 	}
 
 	return nil
+}
+
+func policyRulesEqual(a, b []rbacv1.PolicyRule) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !stringSlicesEqual(a[i].APIGroups, b[i].APIGroups) ||
+			!stringSlicesEqual(a[i].Resources, b[i].Resources) ||
+			!stringSlicesEqual(a[i].ResourceNames, b[i].ResourceNames) ||
+			!stringSlicesEqual(a[i].Verbs, b[i].Verbs) {
+			return false
+		}
+	}
+	return true
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func reconcileLightningPublisherTemplate(current, desired *appsv1.StatefulSet) (bool, error) {
+	const publisherName = "rpc-credential-publisher"
+	var currentPublisher *corev1.Container
+	for i := range current.Spec.Template.Spec.Containers {
+		if current.Spec.Template.Spec.Containers[i].Name == publisherName {
+			currentPublisher = &current.Spec.Template.Spec.Containers[i]
+			break
+		}
+	}
+	if currentPublisher == nil {
+		return false, fmt.Errorf("existing Lightning StatefulSet is missing %s container", publisherName)
+	}
+
+	var desiredPublisher *corev1.Container
+	for i := range desired.Spec.Template.Spec.Containers {
+		if desired.Spec.Template.Spec.Containers[i].Name == publisherName {
+			desiredPublisher = &desired.Spec.Template.Spec.Containers[i]
+			break
+		}
+	}
+	if desiredPublisher == nil {
+		return false, fmt.Errorf("desired Lightning StatefulSet is missing %s container", publisherName)
+	}
+
+	updated := false
+	if !stringSlicesEqual(currentPublisher.Command, desiredPublisher.Command) {
+		currentPublisher.Command = append([]string(nil), desiredPublisher.Command...)
+		updated = true
+	}
+	if !stringSlicesEqual(currentPublisher.Args, desiredPublisher.Args) {
+		currentPublisher.Args = append([]string(nil), desiredPublisher.Args...)
+		updated = true
+	}
+	if !envVarsEqual(currentPublisher.Env, desiredPublisher.Env) {
+		currentPublisher.Env = append([]corev1.EnvVar(nil), desiredPublisher.Env...)
+		updated = true
+	}
+	return updated, nil
+}
+
+func envVarsEqual(a, b []corev1.EnvVar) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || a[i].Value != b[i].Value {
+			return false
+		}
+		if (a[i].ValueFrom == nil) != (b[i].ValueFrom == nil) {
+			return false
+		}
+		if a[i].ValueFrom != nil {
+			if a[i].ValueFrom.FieldRef == nil || b[i].ValueFrom.FieldRef == nil ||
+				a[i].ValueFrom.FieldRef.FieldPath != b[i].ValueFrom.FieldRef.FieldPath {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1.LightningNode, connection resolvedBitcoinConnection) *appsv1.StatefulSet {
