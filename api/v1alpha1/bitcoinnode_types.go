@@ -57,16 +57,15 @@ type RewardAddress struct {
 	SecretKey string `json:"secretKey,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage configuration is immutable"
 type BitcoinStorage struct {
 	// Size is the requested capacity for the Bitcoin data volume.
 	// +kubebuilder:default="2Gi"
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage size is immutable"
 	Size resource.Quantity `json:"size,omitempty"`
 
 	// StorageClassName selects the Kubernetes StorageClass used for the Bitcoin data volume.
 	// When omitted, the cluster default StorageClass is used.
 	// +optional
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage class is immutable"
 	StorageClassName *string `json:"storageClassName,omitempty"`
 }
 
