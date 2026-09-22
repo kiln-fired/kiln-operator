@@ -259,6 +259,25 @@ var _ = Describe("BitcoinNode controller", func() {
 		Expect(*claim.StorageClassName).To(Equal(storageClass))
 	})
 
+	It("rejects storage changes after creation", func() {
+		storageClass := "fast-storage"
+		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
+			ObjectMeta: metav1.ObjectMeta{Name: BitcoinNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.BitcoinNodeSpec{
+				Storage: bitcoinv1alpha1.BitcoinStorage{
+					Size:             resource.MustParse("10Gi"),
+					StorageClassName: &storageClass,
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, bitcoinNode)).To(Succeed())
+
+		found := &bitcoinv1alpha1.BitcoinNode{}
+		Expect(k8sClient.Get(ctx, bitcoinNodeNamespaceName, found)).To(Succeed())
+		found.Spec.Storage.Size = resource.MustParse("20Gi")
+		Expect(k8sClient.Update(ctx, found)).ToNot(Succeed())
+	})
+
 	It("blocks mainnet unless it is explicitly enabled", func() {
 		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
 			ObjectMeta: metav1.ObjectMeta{Name: BitcoinNodeName, Namespace: Namespace},
