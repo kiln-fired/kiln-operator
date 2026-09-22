@@ -411,7 +411,7 @@ var _ = Describe("LightningNode controller", func() {
 				rpcSecret = env.ValueFrom.SecretKeyRef.Name
 			}
 		}
-		Expect(rpcHost).To(Equal("bitcoin"))
+		Expect(rpcHost).To(Equal("bitcoin-bitcoin"))
 		Expect(rpcSecret).To(Equal("bitcoin-creds"))
 
 		foundLightningNode := &bitcoinv1alpha1.LightningNode{}
