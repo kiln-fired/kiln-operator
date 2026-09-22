@@ -409,6 +409,18 @@ echo "Confirming channel funding transaction"
 mine_to_address 6 "$alice_address"
 kubectl wait -n "$NAMESPACE" lightningchannel/alice-to-bob --for=condition=Ready --timeout=180s
 
+echo "Waiting for retained static channel backup publication"
+kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=BackupReady --timeout=120s
+backup_secret="$LIGHTNING_NODE-scb"
+for i in {1..60}; do
+  backup_data="$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.data.channel\.backup}' 2>/dev/null || true)"
+  [[ -n "$backup_data" ]] && break
+  sleep 2
+done
+[[ -n "$backup_data" ]]
+backup_secret_uid="$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.metadata.uid}')"
+[[ "$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.metadata.ownerReferences}' 2>/dev/null || true)" == "" || "$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.metadata.ownerReferences}' 2>/dev/null || true)" == "<no value>" ]]
+
 channel_point_before="$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.channelPoint}')"
 [[ "$channel_point_before" == "$channel_point" ]]
 [[ "$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.active}')" == "true" ]]
@@ -422,6 +434,9 @@ kubectl rollout status deployment/kiln-operator-controller-manager -n kiln-opera
 assert_same_pubkey "$initial_pubkey"
 kubectl wait -n "$NAMESPACE" lightningpeer/bob --for=condition=Ready --timeout=120s
 kubectl wait -n "$NAMESPACE" lightningchannel/alice-to-bob --for=condition=Ready --timeout=120s
+kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=BackupReady --timeout=120s
+[[ "$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.metadata.uid}')" == "$backup_secret_uid" ]]
+[[ -n "$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.data.channel\.backup}')" ]]
 [[ "$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.channelPoint}')" == "$channel_point_before" ]]
 
 peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
@@ -488,12 +503,17 @@ for resource in   "secret/lnd-rpc"   "secret/lnd-operator-rpc"   "serviceaccount
 done
 
 kubectl get pvc -n "$NAMESPACE" "$pvc_name" >/dev/null
+kubectl get secret -n "$NAMESPACE" "$backup_secret" >/dev/null
+[[ "$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.metadata.uid}')" == "$backup_secret_uid" ]]
+[[ -n "$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.data.channel\.backup}')" ]]
 pvc_uid_after_delete="$(kubectl get pvc -n "$NAMESPACE" "$pvc_name" -o jsonpath='{.metadata.uid}')"
 [[ "$pvc_uid_before" == "$pvc_uid_after_delete" ]]
 
 kubectl apply -f "$tmpdir/lightning.yaml"
 kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=240s
+kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=BackupReady --timeout=120s
 wait_for_secret_keys lnd-rpc
+[[ "$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.metadata.uid}')" == "$backup_secret_uid" ]]
 pvc_uid_after_recreate="$(kubectl get pvc -n "$NAMESPACE" "$pvc_name" -o jsonpath='{.metadata.uid}')"
 [[ "$pvc_uid_before" == "$pvc_uid_after_recreate" ]]
 
