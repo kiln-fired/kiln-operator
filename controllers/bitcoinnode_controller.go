@@ -355,6 +355,10 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode, resourceName string) *appsv1.StatefulSet {
 	ls := labelsForBitcoinNode(b.Name)
 	size := int32(1)
+	storageSize := b.Spec.Storage.Size
+	if storageSize.IsZero() {
+		storageSize = resource.MustParse("2Gi")
+	}
 
 	btcdImage := b.Spec.ContainerImages.BtcdImage
 	if btcdImage == "" {
@@ -625,10 +629,11 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 					Name:   "btcd-data",
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOncePod},
+					AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOncePod},
+					StorageClassName: b.Spec.Storage.StorageClassName,
 					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("2Gi"),
+							corev1.ResourceStorage: storageSize,
 						},
 					},
 				},

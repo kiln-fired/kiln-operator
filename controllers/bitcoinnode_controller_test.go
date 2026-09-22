@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -136,6 +137,8 @@ var _ = Describe("BitcoinNode controller", func() {
 		Expect(*foundStatefulSet.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(60)))
 		Expect(foundStatefulSet.Spec.VolumeClaimTemplates).To(HaveLen(1))
 		Expect(foundStatefulSet.Spec.VolumeClaimTemplates[0].Spec.AccessModes).To(Equal([]corev1.PersistentVolumeAccessMode{corev1.ReadWriteOncePod}))
+		Expect(foundStatefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("2Gi")))
+		Expect(foundStatefulSet.Spec.VolumeClaimTemplates[0].Spec.StorageClassName).To(BeNil())
 
 		By("checking the upstream btcd runtime configuration")
 		Expect(foundStatefulSet.Spec.Template.Spec.Containers).To(HaveLen(2))
@@ -232,6 +235,47 @@ var _ = Describe("BitcoinNode controller", func() {
 			Expect(len(foundStatefulSet.Spec.Template.Spec.Containers)).To(Equal(2))
 			return nil
 		}, time.Minute, time.Second).Should(Succeed())
+	})
+
+	It("applies configured Bitcoin storage size and class", func() {
+		storageClass := "fast-storage"
+		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
+			ObjectMeta: metav1.ObjectMeta{Name: BitcoinNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.BitcoinNodeSpec{
+				Storage: bitcoinv1alpha1.BitcoinStorage{
+					Size:             resource.MustParse("1Ti"),
+					StorageClassName: &storageClass,
+				},
+			},
+		}
+		reconciler := BitcoinNodeReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
+		statefulSet := reconciler.statefulsetForBitcoinNode(bitcoinNode, bitcoinNodeOwnedResourceName(BitcoinNodeName))
+		Expect(statefulSet).ToNot(BeNil())
+		Expect(statefulSet.Spec.VolumeClaimTemplates).To(HaveLen(1))
+		claim := statefulSet.Spec.VolumeClaimTemplates[0].Spec
+		Expect(claim.AccessModes).To(Equal([]corev1.PersistentVolumeAccessMode{corev1.ReadWriteOncePod}))
+		Expect(claim.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("1Ti")))
+		Expect(claim.StorageClassName).ToNot(BeNil())
+		Expect(*claim.StorageClassName).To(Equal(storageClass))
+	})
+
+	It("rejects storage changes after creation", func() {
+		storageClass := "fast-storage"
+		bitcoinNode := &bitcoinv1alpha1.BitcoinNode{
+			ObjectMeta: metav1.ObjectMeta{Name: BitcoinNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.BitcoinNodeSpec{
+				Storage: bitcoinv1alpha1.BitcoinStorage{
+					Size:             resource.MustParse("10Gi"),
+					StorageClassName: &storageClass,
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, bitcoinNode)).To(Succeed())
+
+		found := &bitcoinv1alpha1.BitcoinNode{}
+		Expect(k8sClient.Get(ctx, bitcoinNodeNamespaceName, found)).To(Succeed())
+		found.Spec.Storage.Size = resource.MustParse("20Gi")
+		Expect(k8sClient.Update(ctx, found)).ToNot(Succeed())
 	})
 
 	It("blocks mainnet unless it is explicitly enabled", func() {

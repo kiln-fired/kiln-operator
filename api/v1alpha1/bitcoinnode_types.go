@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -54,6 +55,18 @@ type RewardAddress struct {
 	// +optional
 	// +kubebuilder:default="np2wkhAddress"
 	SecretKey string `json:"secretKey,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="storage configuration is immutable"
+type BitcoinStorage struct {
+	// Size is the requested capacity for the Bitcoin data volume.
+	// +kubebuilder:default="2Gi"
+	Size resource.Quantity `json:"size,omitempty"`
+
+	// StorageClassName selects the Kubernetes StorageClass used for the Bitcoin data volume.
+	// When omitted, the cluster default StorageClass is used.
+	// +optional
+	StorageClassName *string `json:"storageClassName,omitempty"`
 }
 
 type NetworkSafetyPolicy struct {
@@ -98,6 +111,11 @@ type BitcoinNodeSpec struct {
 	// +kubebuilder:validation:Enum=simnet;testnet;regtest;signet;mainnet
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="network is immutable"
 	Network string `json:"network,omitempty"`
+
+	// Persistent storage configuration for Bitcoin chain data.
+	// Storage settings are used when the StatefulSet claim template is first created.
+	// +kubebuilder:default={size: "2Gi"}
+	Storage BitcoinStorage `json:"storage,omitempty"`
 
 	// Safety policy for network-sensitive behavior.
 	Safety NetworkSafetyPolicy `json:"safety,omitempty"`

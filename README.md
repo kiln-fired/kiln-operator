@@ -74,6 +74,21 @@ The primary runtime relationship is:
 
 Container image fields remain overrideable in the custom resources, but Kiln does not currently attempt to abstract across multiple Bitcoin or Lightning implementations.
 
+## Bitcoin storage
+
+`BitcoinNode` storage capacity and StorageClass are configurable when the node is provisioned:
+
+```yaml
+spec:
+  storage:
+    size: 1Ti
+    storageClassName: fast-storage
+```
+
+The defaults are a `2Gi` request and the cluster's default StorageClass. Kiln always uses `ReadWriteOncePod` for the Bitcoin data claim; access mode is a lifecycle-safety invariant rather than a user-selectable setting.
+
+`storage.size` and `storage.storageClassName` are immutable after creation. Kiln does not treat edits to the CR as a generic PVC migration or resize operation. Retained PVCs remain authoritative during deletion/recreation recovery, so changing storage settings cannot silently replace persisted Bitcoin data.
+
 ## Lightning lifecycle contract
 
 Lightning state is not treated like reconstructable Bitcoin chain data. Kiln therefore gives `LightningNode` stronger lifecycle guarantees than a simple Deployment wrapper.
