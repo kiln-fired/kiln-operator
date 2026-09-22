@@ -141,7 +141,7 @@ func (r *SeedReconciler) resolveSeedInput(ctx context.Context, seed *bitcoinv1al
 	}
 	mnemonic, err := initializeMnemonic(string(mnemonicBytes))
 	if err != nil {
-		return aezeed.Mnemonic{}, "", "InvalidMnemonic", err
+		return aezeed.Mnemonic{}, "", "InvalidMnemonic", fmt.Errorf("invalid aezeed mnemonic")
 	}
 	return mnemonic, string(passphraseBytes), "", nil
 }
@@ -251,7 +251,9 @@ func (r *SeedReconciler) mapSecretToSeeds(ctx context.Context, obj client.Object
 	requests := make([]ctrl.Request, 0)
 	for i := range seeds.Items {
 		seed := &seeds.Items[i]
-		if seed.Spec.Import != nil && seed.Spec.Import.SecretName == obj.GetName() {
+		importMatches := seed.Spec.Import != nil && seed.Spec.Import.SecretName == obj.GetName()
+		outputMatches := seed.Spec.SecretName == obj.GetName()
+		if importMatches || outputMatches {
 			requests = append(requests, ctrl.Request{NamespacedName: types.NamespacedName{
 				Namespace: seed.Namespace,
 				Name:      seed.Name,
