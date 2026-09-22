@@ -35,9 +35,24 @@ spec:
           spec:
             description: SeedSpec defines the desired state of Seed
             properties:
-              mnemonic:
-                description: aezeed mnemonic phrase
-                type: string
+              import:
+                description: Optional Secret reference containing aezeed mnemonic and passphrase input. When omitted, Kiln generates new seed material.
+                properties:
+                  mnemonicKey:
+                    default: mnemonic
+                    description: Name of the secret key that contains the mnemonic seed
+                    type: string
+                  passphraseKey:
+                    default: passphrase
+                    description: Name of the secret key that contains the seed passphrase
+                    type: string
+                  secretName:
+                    description: Name of the secret that contains the seed to import
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: import is immutable
+                  rule: self == oldSelf
               network:
                 default: simnet
                 description: Bitcoin network used to derive the root key.
@@ -45,17 +60,66 @@ spec:
                 - simnet
                 - mainnet
                 type: string
-              passphrase:
-                description: aezeed password
-                type: string
+                x-kubernetes-validations:
+                - message: network is immutable
+                  rule: self == oldSelf
               secretName:
-                description: Name of secret to store master key
+                description: Name of the retained Secret that stores generated/imported seed material.
+                minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: secretName is immutable
+                  rule: self == oldSelf
             required:
             - secretName
             type: object
+            x-kubernetes-validations:
+            - message: import Secret must differ from output secretName
+              rule: '!has(self.import) || self.import.secretName != self.secretName'
           status:
-            description: SeedStatus defines the observed state of Seed
+            description: SeedStatus defines the observed state of Seed.
+            properties:
+              conditions:
+                description: Conditions summarize seed generation/import and retained Secret publication.
+                items:
+                  description: Condition contains details for one aspect of the current state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\\/)?(([A-Z]([a-z0-9]*[A-Z0-9])*)|([a-z0-9]([a-z0-9]*[A-Z0-9])*))$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              secretName:
+                description: SecretName is the retained Secret containing the resulting seed material.
+                type: string
             type: object
         type: object
     served: true
