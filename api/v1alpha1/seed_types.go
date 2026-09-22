@@ -16,22 +16,19 @@ limitations under the License.
 
 package v1alpha1
 
-import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // SeedSpec defines the desired state of Seed
+// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="seed configuration is immutable"
 type SeedSpec struct {
-	// Name of secret to store master key
+	// Name of the retained Secret that stores generated/imported seed material.
+	// +kubebuilder:validation:MinLength=1
 	SecretName string `json:"secretName"`
 
-	// aezeed mnemonic phrase
+	// Optional Secret reference containing aezeed mnemonic and passphrase input.
+	// When omitted, Kiln generates new seed material.
 	// +optional
-	Mnemonic string `json:"mnemonic,omitempty"`
-
-	// aezeed password
-	// +optional
-	Passphrase string `json:"passphrase,omitempty"`
+	Import *SeedImport `json:"import,omitempty"`
 
 	// Bitcoin network used to derive the root key.
 	// +kubebuilder:default="simnet"
@@ -39,8 +36,15 @@ type SeedSpec struct {
 	Network string `json:"network,omitempty"`
 }
 
-// SeedStatus defines the observed state of Seed
-type SeedStatus struct {}
+// SeedStatus defines the observed state of Seed.
+type SeedStatus struct {
+	// SecretName is the retained Secret containing the resulting seed material.
+	SecretName string `json:"secretName,omitempty"`
+
+	// Conditions summarize seed generation/import and retained Secret publication.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status

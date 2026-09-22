@@ -89,6 +89,52 @@ The defaults are a `2Gi` request and the cluster's default StorageClass. Kiln al
 
 `storage.size` and `storage.storageClassName` are immutable after creation. Kiln does not treat edits to the CR as a generic PVC migration or resize operation. Retained PVCs remain authoritative during deletion/recreation recovery, so changing storage settings cannot silently replace persisted Bitcoin data.
 
+## Seed material
+
+`Seed` is a development-oriented helper for producing LND-compatible seed material in a Kubernetes Secret. Sensitive mnemonic and passphrase values are never stored directly in the Seed custom resource.
+
+Generate new seed material:
+
+```yaml
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: Seed
+metadata:
+  name: lnd
+spec:
+  secretName: lnd-seed
+  network: simnet
+```
+
+Import existing aezeed material from another Secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: lnd-seed-import
+stringData:
+  mnemonic: "<24-word aezeed mnemonic>"
+  passphrase: "<aezeed passphrase>"
+---
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: Seed
+metadata:
+  name: lnd
+spec:
+  secretName: lnd-seed
+  network: simnet
+  import:
+    secretName: lnd-seed-import
+    mnemonicKey: mnemonic
+    passphraseKey: passphrase
+```
+
+Kiln publishes `mnemonic`, `passphrase`, and the derived `rootkey` only into the output Secret. That output Secret is intentionally retained independently of the `Seed` CR so deleting and recreating the CR does not garbage-collect recovery material. Kiln marks retained Seed Secrets and refuses to adopt unrelated same-name Secrets.
+
+Existing pre-hardening Seed Secrets that are still controller-owned are migrated in place: Kiln removes the old owner reference, adds the retained-seed marker, and preserves the secret bytes.
+
+`Seed.status.conditions` reports `Ready` and `SecretReady`. Invalid mnemonic/passphrase input, missing import Secrets, and target Secret collisions are reported with non-sensitive reasons and messages. If a previously ready generated Seed Secret is deleted, Kiln reports `SeedMaterialLost` rather than silently generating a different identity. Imported seed output can be republished from its source Secret.
+
 ## Lightning lifecycle contract
 
 Lightning state is not treated like reconstructable Bitcoin chain data. Kiln therefore gives `LightningNode` stronger lifecycle guarantees than a simple Deployment wrapper.
@@ -515,6 +561,8 @@ Current defaults intentionally favor limited authority:
 
 - LND client credentials are Kubernetes Secrets
 - wallet passwords and seeds are referenced, not copied into status
+- Seed import values are sourced from Secrets rather than plaintext CR fields
+- generated/imported Seed output Secrets are retained across Seed CR deletion
 - the exported client macaroon set excludes admin access
 - internal administrative credentials are isolated in a LightningNode-owned Secret used by Kiln reconciliation
 - the credential publisher can update only its two node-owned destination Secrets

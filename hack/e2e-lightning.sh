@@ -252,11 +252,19 @@ spec:
   network: simnet
 EOF
 kubectl apply -f "$tmpdir/bob-seed.yaml"
-for i in {1..60}; do
-  kubectl get secret -n "$NAMESPACE" bob-seed-secret >/dev/null 2>&1 && break
-  sleep 1
-done
+kubectl wait -n "$NAMESPACE" seed/bob-seed --for=condition=Ready --timeout=120s
 kubectl get secret -n "$NAMESPACE" bob-seed-secret >/dev/null
+bob_seed_secret_uid="$(kubectl get secret -n "$NAMESPACE" bob-seed-secret -o jsonpath='{.metadata.uid}')"
+[[ -n "$(kubectl get secret -n "$NAMESPACE" bob-seed-secret -o jsonpath='{.data.mnemonic}')" ]]
+[[ -z "$(kubectl get secret -n "$NAMESPACE" bob-seed-secret -o jsonpath='{.metadata.ownerReferences}' 2>/dev/null || true)" ]]
+
+echo "Verifying Seed deletion retains recovery material"
+kubectl delete -f "$tmpdir/bob-seed.yaml" --wait=true
+kubectl get secret -n "$NAMESPACE" bob-seed-secret >/dev/null
+[[ "$(kubectl get secret -n "$NAMESPACE" bob-seed-secret -o jsonpath='{.metadata.uid}')" == "$bob_seed_secret_uid" ]]
+kubectl apply -f "$tmpdir/bob-seed.yaml"
+kubectl wait -n "$NAMESPACE" seed/bob-seed --for=condition=Ready --timeout=120s
+[[ "$(kubectl get secret -n "$NAMESPACE" bob-seed-secret -o jsonpath='{.metadata.uid}')" == "$bob_seed_secret_uid" ]]
 
 cat >"$tmpdir/bitcoin.yaml" <<EOF
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
