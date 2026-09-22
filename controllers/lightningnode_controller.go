@@ -415,7 +415,9 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, nil
+	// Periodically refresh authenticated runtime and backup observations even
+	// when Kubernetes objects are otherwise quiet.
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
 func (r *LightningNodeReconciler) resolveBitcoinConnection(ctx context.Context, l *bitcoinv1alpha1.LightningNode) (resolvedBitcoinConnection, bool, error) {
