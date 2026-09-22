@@ -460,7 +460,7 @@ func doLNDOperatorRequest(ctx context.Context, node *bitcoinv1alpha1.LightningNo
 		body = bytes.NewReader(payload)
 	}
 
-	host := node.Name + "." + node.Namespace + ".svc.cluster.local"
+	host := lightningNodeServiceHost(node)
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{

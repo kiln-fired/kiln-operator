@@ -30,6 +30,15 @@ Kiln provides namespaced APIs for Bitcoin, Lightning nodes, peers, channels, and
 | `LightningChannel` | Declares a funded channel that Kiln reconciles through pending, open, and closing states |
 | `Seed` | Creates LND-compatible seed material for development/testing workflows |
 
+New node workloads use type-qualified Kubernetes resource names so a `BitcoinNode` and `LightningNode` may safely share the same CR name:
+
+```text
+BitcoinNode/foo   -> StatefulSet/foo-bitcoin, Service/foo-bitcoin
+LightningNode/foo -> StatefulSet/foo-lightning, Service/foo-lightning
+```
+
+Kiln verifies controller ownership before using or deleting an existing child resource. It never adopts an unrelated StatefulSet or Service merely because the name matches. Existing installations remain recovery-compatible: when Kiln finds an owned legacy StatefulSet or a retained legacy PVC, that node continues using the pre-change resource name so upgrades and CR recreation do not strand persisted data.
+
 The primary runtime relationship is:
 
 ```text
@@ -309,7 +318,7 @@ For a `LightningNode` named `lnd` in namespace `bitcoin`:
 
 ```shell
 lncli --network simnet \
-  --rpcserver lnd.bitcoin.svc.cluster.local:10009 \
+  --rpcserver lnd-lightning.bitcoin.svc.cluster.local:10009 \
   --tlscertpath ./tls.cert \
   --macaroonpath ./readonly.macaroon \
   getinfo
@@ -333,7 +342,7 @@ A `LightningNode` status includes:
 ```yaml
 status:
   phase: Ready
-  rpcAddress: lnd.bitcoin.svc.cluster.local:10009
+  rpcAddress: lnd-lightning.bitcoin.svc.cluster.local:10009
   rpcSecretName: lnd-rpc
   runtime:
     identityPubkey: 03...
@@ -494,7 +503,7 @@ Current defaults intentionally favor limited authority:
 - the exported client macaroon set excludes admin access
 - internal administrative credentials are isolated in a LightningNode-owned Secret used by Kiln reconciliation
 - the credential publisher can update only its two node-owned destination Secrets
-- existing unrelated Secrets are never silently adopted
+- existing unrelated Secrets, StatefulSets, and Services are never silently adopted
 - LND state uses single-pod storage fencing
 - persistent Lightning state is retained rather than silently destroyed
 - LND static channel backups are continuously published to a retained, node-specific Secret

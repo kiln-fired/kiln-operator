@@ -5,6 +5,9 @@ NAMESPACE="${NAMESPACE:-kiln-e2e}"
 BITCOIN_NODE="${BITCOIN_NODE:-btcd}"
 LIGHTNING_NODE="${LIGHTNING_NODE:-lnd}"
 SECOND_LIGHTNING_NODE="${SECOND_LIGHTNING_NODE:-lnd-bob}"
+BITCOIN_RESOURCE="${BITCOIN_NODE}-bitcoin"
+LIGHTNING_RESOURCE="${LIGHTNING_NODE}-lightning"
+SECOND_LIGHTNING_RESOURCE="${SECOND_LIGHTNING_NODE}-lightning"
 CLIENT_POD="${CLIENT_POD:-lnd-client}"
 
 tmpdir="$(mktemp -d)"
@@ -16,10 +19,10 @@ dump_debug() {
   kubectl get bitcoinnodes,lightningnodes,lightningpeers,lightningchannels,seeds -A -o yaml || true
   kubectl get events -A --sort-by=.lastTimestamp | tail -100 || true
   kubectl logs -n kiln-operator-system deployment/kiln-operator-controller-manager --all-containers --tail=300 || true
-  kubectl logs -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --tail=200 || true
-  kubectl logs -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c rpc-credential-publisher --tail=200 || true
-  kubectl logs -n "$NAMESPACE" "$SECOND_LIGHTNING_NODE-0" -c lnd --tail=200 || true
-  kubectl logs -n "$NAMESPACE" "$SECOND_LIGHTNING_NODE-0" -c rpc-credential-publisher --tail=200 || true
+  kubectl logs -n "$NAMESPACE" "$LIGHTNING_RESOURCE-0" -c lnd --tail=200 || true
+  kubectl logs -n "$NAMESPACE" "$LIGHTNING_RESOURCE-0" -c rpc-credential-publisher --tail=200 || true
+  kubectl logs -n "$NAMESPACE" "$SECOND_LIGHTNING_RESOURCE-0" -c lnd --tail=200 || true
+  kubectl logs -n "$NAMESPACE" "$SECOND_LIGHTNING_RESOURCE-0" -c rpc-credential-publisher --tail=200 || true
   echo "::endgroup::"
 }
 trap 'rc=$?; if [[ $rc -ne 0 ]]; then dump_debug; fi; rm -rf "$tmpdir"; exit $rc' EXIT
@@ -124,7 +127,7 @@ recreate_client() {
 }
 
 get_pubkey() {
-  kubectl exec -n "$NAMESPACE" "$CLIENT_POD" --     lncli --network=simnet       --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009"       --tlscertpath=/rpc/tls.cert       --macaroonpath=/rpc/readonly.macaroon       getinfo | jq -r '.identity_pubkey'
+  kubectl exec -n "$NAMESPACE" "$CLIENT_POD" --     lncli --network=simnet       --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009"       --tlscertpath=/rpc/tls.cert       --macaroonpath=/rpc/readonly.macaroon       getinfo | jq -r '.identity_pubkey'
 }
 
 assert_same_pubkey() {
@@ -169,8 +172,8 @@ mine_to_address() {
       --dry-run=client -o yaml | kubectl apply -f -
 
     echo "Restarting btcd to apply updated mining address"
-    kubectl delete pod -n "$NAMESPACE" "$BITCOIN_NODE-0" --wait=true
-    kubectl wait -n "$NAMESPACE" pod/"$BITCOIN_NODE-0" --for=condition=Ready --timeout=120s
+    kubectl delete pod -n "$NAMESPACE" "$BITCOIN_RESOURCE-0" --wait=true
+    kubectl wait -n "$NAMESPACE" pod/"$BITCOIN_RESOURCE-0" --for=condition=Ready --timeout=120s
   fi
 
   current="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')"
@@ -204,7 +207,7 @@ spec:
 EOF
 kubectl apply -f "$tmpdir/mainnet-blocked-bitcoin.yaml"
 wait_for_condition_status bitcoinnode blocked-mainnet-bitcoin NetworkReady False
-assert_no_statefulset blocked-mainnet-bitcoin
+assert_no_statefulset blocked-mainnet-bitcoin-bitcoin
 [[ "$(kubectl get bitcoinnode -n "$NAMESPACE" blocked-mainnet-bitcoin -o jsonpath='{.status.network}')" == "mainnet" ]]
 cat >"$tmpdir/mainnet-blocked-lightning.yaml" <<EOF
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
@@ -224,12 +227,12 @@ spec:
 EOF
 kubectl apply -f "$tmpdir/mainnet-blocked-lightning.yaml"
 wait_for_condition_status lightningnode blocked-mainnet-lightning NetworkReady False
-assert_no_statefulset blocked-mainnet-lightning
+assert_no_statefulset blocked-mainnet-lightning-lightning
 [[ "$(kubectl get lightningnode -n "$NAMESPACE" blocked-mainnet-lightning -o jsonpath='{.status.network}')" == "mainnet" ]]
 kubectl delete -f "$tmpdir/mainnet-blocked-lightning.yaml" --wait=true --timeout=60s
 kubectl delete -f "$tmpdir/mainnet-blocked-bitcoin.yaml" --wait=true --timeout=60s
 
-openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_NODE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_NODE,DNS:$BITCOIN_NODE.$NAMESPACE.svc,DNS:$BITCOIN_NODE.$NAMESPACE.svc.cluster.local"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_RESOURCE,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"
 
 kubectl create secret generic btcd-rpc-tls -n "$NAMESPACE"   --from-file=tls.crt="$tmpdir/btcd.crt"   --from-file=tls.key="$tmpdir/btcd.key"   --from-file=ca.crt="$tmpdir/btcd.crt"
 kubectl create secret generic btcd-rpc-creds -n "$NAMESPACE"   --from-literal=username=kiln   --from-literal=password=kiln-e2e-password
@@ -287,7 +290,7 @@ kubectl apply -f "$tmpdir/lightning.yaml"
 kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=240s
 wait_for_secret_keys lnd-rpc
 
-alice_address="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --   lncli --network=simnet     --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009"     --tlscertpath=/data/tls.cert     --macaroonpath=/data/data/chain/bitcoin/simnet/admin.macaroon     newaddress p2wkh | jq -r '.address')"
+alice_address="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_RESOURCE-0" -c lnd --   lncli --network=simnet     --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009"     --tlscertpath=/data/tls.cert     --macaroonpath=/data/data/chain/bitcoin/simnet/admin.macaroon     newaddress p2wkh | jq -r '.address')"
 [[ -n "$alice_address" && "$alice_address" != "null" ]]
 
 echo "Funding Alice's simnet wallet"
@@ -297,8 +300,8 @@ mine_to_address 301 "$alice_address"
 # GetInfo still reports synced_to_chain=false. Restart LND against the now-stable
 # chain and require a fresh wallet sync before any peer/channel reconciliation.
 echo "Restarting Alice LND after initial simnet bootstrap"
-kubectl delete pod -n "$NAMESPACE" "$LIGHTNING_NODE-0" --wait=true
-kubectl wait -n "$NAMESPACE" pod/"$LIGHTNING_NODE-0" --for=condition=Ready --timeout=180s
+kubectl delete pod -n "$NAMESPACE" "$LIGHTNING_RESOURCE-0" --wait=true
+kubectl wait -n "$NAMESPACE" pod/"$LIGHTNING_RESOURCE-0" --for=condition=Ready --timeout=180s
 kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=180s
 wait_for_lightning_sync "$LIGHTNING_NODE"
 
@@ -306,7 +309,7 @@ bitcoin_height="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jso
 (( bitcoin_height > 300 ))
 
 for i in {1..90}; do
-  confirmed_balance="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_NODE-0" -c lnd --     lncli --network=simnet       --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009"       --tlscertpath=/data/tls.cert       --macaroonpath=/data/data/chain/bitcoin/simnet/admin.macaroon       walletbalance | jq -r '.confirmed_balance')"
+  confirmed_balance="$(kubectl exec -n "$NAMESPACE" "$LIGHTNING_RESOURCE-0" -c lnd --     lncli --network=simnet       --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009"       --tlscertpath=/data/tls.cert       --macaroonpath=/data/data/chain/bitcoin/simnet/admin.macaroon       walletbalance | jq -r '.confirmed_balance')"
   if [[ "$confirmed_balance" =~ ^[0-9]+$ ]] && (( confirmed_balance >= 100000 )); then
     break
   fi
@@ -359,7 +362,7 @@ metadata:
 spec:
   nodeRef: $LIGHTNING_NODE
   pubkey: $bob_pubkey
-  address: $SECOND_LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:9735
+  address: $SECOND_LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:9735
 EOF
 kubectl apply -f "$tmpdir/peer.yaml"
 kubectl wait -n "$NAMESPACE" lightningpeer/bob --for=condition=Ready --timeout=120s
@@ -368,7 +371,7 @@ kubectl wait -n "$NAMESPACE" lightningpeer/bob --for=condition=Ready --timeout=1
 rpc_address="$(kubectl get lightningnode -n "$NAMESPACE" "$LIGHTNING_NODE" -o jsonpath='{.status.rpcAddress}')"
 rpc_secret="$(kubectl get lightningnode -n "$NAMESPACE" "$LIGHTNING_NODE" -o jsonpath='{.status.rpcSecretName}')"
 network="$(kubectl get lightningnode -n "$NAMESPACE" "$LIGHTNING_NODE" -o jsonpath='{.status.network}')"
-[[ "$rpc_address" == "$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" ]]
+[[ "$rpc_address" == "$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009" ]]
 [[ "$rpc_secret" == "lnd-rpc" ]]
 [[ "$network" == "simnet" ]]
 
@@ -377,7 +380,7 @@ initial_pubkey="$(get_pubkey)"
 [[ -n "$initial_pubkey" && "$initial_pubkey" != "null" ]]
 echo "Initial LND identity: $initial_pubkey"
 
-peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
+peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
 [[ "$peer_pubkey" == "$bob_pubkey" ]]
 
 cat >"$tmpdir/channel.yaml" <<EOF
@@ -425,7 +428,7 @@ channel_point_before="$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bo
 [[ "$channel_point_before" == "$channel_point" ]]
 [[ "$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.active}')" == "true" ]]
 
-channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
+channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
 [[ "$channel_count" == "1" ]]
 
 echo "Restarting operator"
@@ -439,10 +442,10 @@ kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Bac
 [[ -n "$(kubectl get secret -n "$NAMESPACE" "$backup_secret" -o jsonpath='{.data.channel\.backup}')" ]]
 [[ "$(kubectl get lightningchannel -n "$NAMESPACE" alice-to-bob -o jsonpath='{.status.channelPoint}')" == "$channel_point_before" ]]
 
-peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
+peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
 [[ "$peer_pubkey" == "$bob_pubkey" ]]
 
-channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
+channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
 [[ "$channel_count" == "1" ]]
 
 echo "Verifying LightningPeer deletion is blocked by the channel dependency"
@@ -466,21 +469,21 @@ done
 mine_to_address 6 "$alice_address"
 kubectl wait -n "$NAMESPACE" --for=delete lightningchannel/alice-to-bob --timeout=180s
 
-channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
+channel_count="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listchannels | jq --arg point "$channel_point_before" '[.channels[]? | select(.channel_point == $point)] | length')"
 [[ "$channel_count" == "0" ]]
 
 echo "Waiting for blocked LightningPeer deletion to resume after channel removal"
 kubectl wait -n "$NAMESPACE" --for=delete lightningpeer/bob --timeout=120s
 for i in {1..60}; do
-  peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_NODE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
+  peer_pubkey="$(kubectl exec -n "$NAMESPACE" "$CLIENT_POD" -- lncli --network=simnet --rpcserver="$LIGHTNING_RESOURCE.$NAMESPACE.svc.cluster.local:10009" --tlscertpath=/rpc/tls.cert --macaroonpath=/rpc/readonly.macaroon listpeers | jq -r --arg pubkey "$bob_pubkey" '.peers[]? | select(.pub_key == $pubkey) | .pub_key')"
   [[ -z "$peer_pubkey" ]] && break
   sleep 1
 done
 [[ -z "$peer_pubkey" ]]
 
 echo "Replacing LND pod"
-kubectl delete pod -n "$NAMESPACE" "$LIGHTNING_NODE-0" --wait=true
-kubectl wait -n "$NAMESPACE" pod/"$LIGHTNING_NODE-0" --for=condition=Ready --timeout=180s
+kubectl delete pod -n "$NAMESPACE" "$LIGHTNING_RESOURCE-0" --wait=true
+kubectl wait -n "$NAMESPACE" pod/"$LIGHTNING_RESOURCE-0" --for=condition=Ready --timeout=180s
 kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=180s
 assert_same_pubkey "$initial_pubkey"
 
@@ -491,7 +494,7 @@ recreate_client
 assert_same_pubkey "$initial_pubkey"
 
 echo "Deleting and recreating LightningNode while retaining its PVC"
-pvc_name="lnd-data-$LIGHTNING_NODE-0"
+pvc_name="lnd-data-$LIGHTNING_RESOURCE-0"
 pvc_uid_before="$(kubectl get pvc -n "$NAMESPACE" "$pvc_name" -o jsonpath='{.metadata.uid}')"
 kubectl delete pod -n "$NAMESPACE" "$CLIENT_POD" --ignore-not-found --wait=true
 kubectl delete -f "$tmpdir/lightning.yaml" --wait=true --timeout=180s

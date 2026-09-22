@@ -23,7 +23,7 @@ var _ = Describe("BitcoinNode controller", func() {
 
 	ctx := context.Background()
 	bitcoinNodeNamespaceName := types.NamespacedName{Namespace: Namespace, Name: BitcoinNodeName}
-	statefulSetNamespaceName := types.NamespacedName{Namespace: Namespace, Name: BitcoinNodeName}
+	statefulSetNamespaceName := types.NamespacedName{Namespace: Namespace, Name: bitcoinNodeOwnedResourceName(BitcoinNodeName)}
 
 	BeforeEach(func() {
 		By("creating namespace to perform the tests")
@@ -172,7 +172,7 @@ var _ = Describe("BitcoinNode controller", func() {
 		Expect(btcdLifecycle.PreStop.Exec.Command[2]).To(ContainSubstring("--rpcserver=\"$RPCSERVER\""))
 		Expect(btcdContainer.Env).To(ContainElement(corev1.EnvVar{
 			Name:  "RPCSERVER",
-			Value: BitcoinNodeName + "." + Namespace + ".svc.cluster.local:18556",
+			Value: bitcoinNodeOwnedResourceName(BitcoinNodeName) + "." + Namespace + ".svc.cluster.local:18556",
 		}))
 
 		By("checking if the mining address is the expected secret reference")

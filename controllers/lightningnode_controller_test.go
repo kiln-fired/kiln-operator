@@ -24,6 +24,7 @@ var _ = Describe("LightningNode controller", func() {
 
 	ctx := context.Background()
 	lightningNodeNamespaceName := types.NamespacedName{Namespace: Namespace, Name: LightningNodeName}
+	lightningOwnedResourceNamespaceName := types.NamespacedName{Namespace: Namespace, Name: lightningNodeOwnedResourceName(LightningNodeName)}
 
 	var reconciler LightningNodeReconciler
 
@@ -55,11 +56,11 @@ var _ = Describe("LightningNode controller", func() {
 			Expect(k8sClient.Delete(ctx, lightningNode)).To(Succeed())
 
 			statefulSet := &appsv1.StatefulSet{}
-			if err := k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet); err == nil {
+			if err := k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, statefulSet); err == nil {
 				Expect(k8sClient.Delete(ctx, statefulSet)).To(Succeed())
 			}
 			service := &corev1.Service{}
-			if err := k8sClient.Get(ctx, lightningNodeNamespaceName, service); err == nil {
+			if err := k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, service); err == nil {
 				Expect(k8sClient.Delete(ctx, service)).To(Succeed())
 			}
 
@@ -130,7 +131,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionFalse))
 
 		statefulSet := &appsv1.StatefulSet{}
-		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		Expect(k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, statefulSet)).To(Succeed())
 		Expect(statefulSet.Spec.UpdateStrategy.Type).To(Equal(appsv1.OnDeleteStatefulSetStrategyType))
 		Expect(statefulSet.Spec.PersistentVolumeClaimRetentionPolicy).ToNot(BeNil())
 		Expect(statefulSet.Spec.PersistentVolumeClaimRetentionPolicy.WhenDeleted).To(Equal(appsv1.RetainPersistentVolumeClaimRetentionPolicyType))
@@ -213,7 +214,7 @@ var _ = Describe("LightningNode controller", func() {
 		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
 		Expect(err).ToNot(HaveOccurred())
 
-		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		Expect(k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, statefulSet)).To(Succeed())
 		statefulSet.Status.Replicas = 1
 		statefulSet.Status.ReadyReplicas = 1
 		Expect(k8sClient.Status().Update(ctx, statefulSet)).To(Succeed())
@@ -223,7 +224,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, foundLightningNode)).To(Succeed())
 		Expect(foundLightningNode.Status.Phase).To(Equal("PublishingCredentials"))
 		Expect(foundLightningNode.Status.RPCSecretName).To(Equal(lightningRPCSecretName(lightningNode)))
-		Expect(foundLightningNode.Status.RPCAddress).To(Equal("test-lightning.test-lightning-namespace.svc.cluster.local:10009"))
+		Expect(foundLightningNode.Status.RPCAddress).To(Equal("test-lightning-lightning.test-lightning-namespace.svc.cluster.local:10009"))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "CredentialsReady").Status).To(Equal(metav1.ConditionFalse))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "BackupReady").Status).To(Equal(metav1.ConditionFalse))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionFalse))
@@ -274,7 +275,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		statefulSet := &appsv1.StatefulSet{}
-		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		Expect(k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, statefulSet)).To(Succeed())
 		publisher := &statefulSet.Spec.Template.Spec.Containers[1]
 		publisher.Args[0] = "while true; do sleep 30; done"
 		publisher.Env = publisher.Env[:3]
@@ -292,7 +293,7 @@ var _ = Describe("LightningNode controller", func() {
 		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
 		Expect(err).ToNot(HaveOccurred())
 
-		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		Expect(k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, statefulSet)).To(Succeed())
 		publisher = &statefulSet.Spec.Template.Spec.Containers[1]
 		Expect(publisher.Args[0]).To(ContainSubstring("channel.backup"))
 		Expect(publisher.Env).To(ContainElement(HaveField("Name", "BACKUP_SECRET_NAME")))
@@ -397,7 +398,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		statefulSet := &appsv1.StatefulSet{}
-		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		Expect(k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, statefulSet)).To(Succeed())
 		lnd := statefulSet.Spec.Template.Spec.Containers[0]
 
 		var rpcHost string
@@ -410,7 +411,7 @@ var _ = Describe("LightningNode controller", func() {
 				rpcSecret = env.ValueFrom.SecretKeyRef.Name
 			}
 		}
-		Expect(rpcHost).To(Equal("bitcoin"))
+		Expect(rpcHost).To(Equal("bitcoin-bitcoin"))
 		Expect(rpcSecret).To(Equal("bitcoin-creds"))
 
 		foundLightningNode := &bitcoinv1alpha1.LightningNode{}
@@ -443,7 +444,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(meta.FindStatusCondition(found.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionFalse))
 
 		statefulSet := &appsv1.StatefulSet{}
-		err = k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)
+		err = k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, statefulSet)
 		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
 
@@ -489,7 +490,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(meta.FindStatusCondition(found.Status.Conditions, "NetworkReady").Status).To(Equal(metav1.ConditionTrue))
 
 		statefulSet := &appsv1.StatefulSet{}
-		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		Expect(k8sClient.Get(ctx, lightningOwnedResourceNamespaceName, statefulSet)).To(Succeed())
 	})
 
 })

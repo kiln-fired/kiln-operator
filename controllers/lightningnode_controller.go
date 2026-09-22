@@ -54,8 +54,9 @@ const (
 // LightningNodeReconciler reconciles a LightningNode object
 type LightningNodeReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	GetInfo func(context.Context, *bitcoinv1alpha1.LightningNode, *corev1.Secret) (*bitcoinv1alpha1.LightningRuntimeStatus, error)
+	APIReader client.Reader
+	Scheme    *runtime.Scheme
+	GetInfo   func(context.Context, *bitcoinv1alpha1.LightningNode, *corev1.Secret) (*bitcoinv1alpha1.LightningRuntimeStatus, error)
 }
 
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=lightningnodes,verbs=get;list;watch;create;update;patch;delete
@@ -85,13 +86,16 @@ func validateLightningNetworkPolicy(l *bitcoinv1alpha1.LightningNode, network st
 	return "PolicyAccepted", nil
 }
 
-func (r *LightningNodeReconciler) stopLightningWorkloadForPolicy(ctx context.Context, l *bitcoinv1alpha1.LightningNode) (bool, error) {
+func (r *LightningNodeReconciler) stopLightningWorkloadForPolicy(ctx context.Context, l *bitcoinv1alpha1.LightningNode, resourceName string) (bool, error) {
 	ss := &appsv1.StatefulSet{}
-	err := r.Get(ctx, types.NamespacedName{Name: l.Name, Namespace: l.Namespace}, ss)
+	err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: l.Namespace}, ss)
 	if errors.IsNotFound(err) {
 		return false, nil
 	}
 	if err != nil {
+		return false, err
+	}
+	if err := controlledBy(ss, l, "StatefulSet"); err != nil {
 		return false, err
 	}
 	if ss.DeletionTimestamp.IsZero() {
@@ -123,6 +127,11 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if err := r.Update(ctx, lightningNode); err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+
+	resourceName, err := r.ownedResourceName(ctx, lightningNode)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	meta.SetStatusCondition(&lightningNode.Status.Conditions, metav1.Condition{
@@ -184,7 +193,7 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if err := r.Status().Update(ctx, lightningNode); err != nil {
 			return ctrl.Result{}, err
 		}
-		stopping, err := r.stopLightningWorkloadForPolicy(ctx, lightningNode)
+		stopping, err := r.stopLightningWorkloadForPolicy(ctx, lightningNode, resourceName)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -215,7 +224,7 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if err := r.Status().Update(ctx, lightningNode); err != nil {
 			return ctrl.Result{}, err
 		}
-		stopping, err := r.stopLightningWorkloadForPolicy(ctx, lightningNode)
+		stopping, err := r.stopLightningWorkloadForPolicy(ctx, lightningNode, resourceName)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -236,12 +245,12 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 	lightningNode.Status.RPCSecretName = lightningRPCSecretName(lightningNode)
-	lightningNode.Status.RPCAddress = lightningNode.Name + "." + lightningNode.Namespace + ".svc.cluster.local:10009"
+	lightningNode.Status.RPCAddress = resourceName + "." + lightningNode.Namespace + ".svc.cluster.local:10009"
 
 	foundStatefulSet := &appsv1.StatefulSet{}
-	err = r.Get(ctx, types.NamespacedName{Name: lightningNode.Name, Namespace: lightningNode.Namespace}, foundStatefulSet)
+	err = r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: lightningNode.Namespace}, foundStatefulSet)
 	if err != nil && errors.IsNotFound(err) {
-		ss := r.statefulsetForLightningNode(lightningNode, connection)
+		ss := r.statefulsetForLightningNode(lightningNode, connection, resourceName)
 		log.Info("Creating a new StatefulSet", "StatefulSet.Namespace", ss.Namespace, "StatefulSet.Name", ss.Name)
 		if err := r.Create(ctx, ss); err != nil {
 			return ctrl.Result{}, err
@@ -268,7 +277,10 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	} else if err != nil {
 		return ctrl.Result{}, err
 	} else {
-		desiredStatefulSet := r.statefulsetForLightningNode(lightningNode, connection)
+		if err := controlledBy(foundStatefulSet, lightningNode, "StatefulSet"); err != nil {
+			return ctrl.Result{}, err
+		}
+		desiredStatefulSet := r.statefulsetForLightningNode(lightningNode, connection, resourceName)
 		if desiredStatefulSet == nil {
 			return ctrl.Result{}, fmt.Errorf("unable to build desired Lightning StatefulSet")
 		}
@@ -285,15 +297,17 @@ func (r *LightningNodeReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	foundService := &corev1.Service{}
-	err = r.Get(ctx, types.NamespacedName{Name: lightningNode.Name, Namespace: lightningNode.Namespace}, foundService)
+	err = r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: lightningNode.Namespace}, foundService)
 	if err != nil && errors.IsNotFound(err) {
-		svc := r.serviceForLightningNode(lightningNode)
+		svc := r.serviceForLightningNode(lightningNode, resourceName)
 		log.Info("Creating a new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
 		if err := r.Create(ctx, svc); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
+		return ctrl.Result{}, err
+	} else if err := controlledBy(foundService, lightningNode, "Service"); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -465,8 +479,16 @@ func (r *LightningNodeReconciler) resolveBitcoinConnection(ctx context.Context, 
 			return resolvedBitcoinConnection{}, false, nil
 		}
 
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		bitcoinResourceName, err := resolveBitcoinNodeOwnedResourceName(ctx, r.Client, reader, bitcoinNode)
+		if err != nil {
+			return resolvedBitcoinConnection{}, false, err
+		}
 		resolved := resolvedBitcoinConnection{
-			Host:                 bitcoinNode.Name,
+			Host:                 bitcoinResourceName,
 			Network:              resolvedBitcoinNetwork(bitcoinNode),
 			CertSecret:           bitcoinNode.Spec.RPCServer.CertSecret,
 			ApiAuthSecretName:    bitcoinNode.Spec.RPCServer.ApiAuthSecretName,
@@ -525,7 +547,7 @@ func fetchLightningRuntime(ctx context.Context, l *bitcoinv1alpha1.LightningNode
 		return nil, fmt.Errorf("unable to parse published LND TLS certificate")
 	}
 
-	host := l.Name + "." + l.Namespace + ".svc.cluster.local"
+	host := lightningNodeServiceHost(l)
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{
@@ -863,7 +885,7 @@ func envVarsEqual(a, b []corev1.EnvVar) bool {
 	return true
 }
 
-func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1.LightningNode, connection resolvedBitcoinConnection) *appsv1.StatefulSet {
+func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1.LightningNode, connection resolvedBitcoinConnection, resourceName string) *appsv1.StatefulSet {
 	ls := labelsForLightningNode(l.Name)
 	size := int32(1)
 
@@ -921,7 +943,7 @@ func (r *LightningNodeReconciler) statefulsetForLightningNode(l *bitcoinv1alpha1
 		Env: []corev1.EnvVar{
 			{Name: "NETWORK", Value: network},
 			{Name: "RPCHOST", Value: connection.Host},
-			{Name: "RPCSERVICE", Value: l.Name + "." + l.Namespace + ".svc.cluster.local"},
+			{Name: "RPCSERVICE", Value: resourceName + "." + l.Namespace + ".svc.cluster.local"},
 			{
 				Name: "RPCUSER",
 				ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
@@ -1012,11 +1034,11 @@ done
 	}
 
 	ss := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: l.Name, Namespace: l.Namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: l.Namespace},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &size,
 			Selector:    &metav1.LabelSelector{MatchLabels: ls},
-			ServiceName: l.Name,
+			ServiceName: resourceName,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.OnDeleteStatefulSetStrategyType,
 			},
@@ -1107,10 +1129,10 @@ done
 	return ss
 }
 
-func (r *LightningNodeReconciler) serviceForLightningNode(l *bitcoinv1alpha1.LightningNode) *corev1.Service {
+func (r *LightningNodeReconciler) serviceForLightningNode(l *bitcoinv1alpha1.LightningNode, resourceName string) *corev1.Service {
 	ls := labelsForLightningNode(l.Name)
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Labels: ls, Name: l.Name, Namespace: l.Namespace},
+		ObjectMeta: metav1.ObjectMeta{Labels: ls, Name: resourceName, Namespace: l.Namespace},
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
@@ -1134,12 +1156,19 @@ func (r *LightningNodeReconciler) finalizeLightningNode(ctx context.Context, l *
 		return ctrl.Result{}, nil
 	}
 
+	resourceName, err := r.ownedResourceName(ctx, l)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	ss := &appsv1.StatefulSet{}
-	err := r.Get(ctx, types.NamespacedName{Name: l.Name, Namespace: l.Namespace}, ss)
+	err = r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: l.Namespace}, ss)
 	if err != nil && !errors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
 	if err == nil {
+		if err := controlledBy(ss, l, "StatefulSet"); err != nil {
+			return ctrl.Result{}, err
+		}
 		if ss.DeletionTimestamp.IsZero() {
 			propagation := metav1.DeletePropagationForeground
 			if err := r.Delete(ctx, ss, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
