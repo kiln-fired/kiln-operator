@@ -146,6 +146,60 @@ var _ = Describe("Seed controller", func() {
 		Expect(ready.Reason).To(Equal("SecretCollision"))
 	})
 
+	It("does not silently replace lost generated seed material", func() {
+		seed := &bitcoinv1alpha1.Seed{
+			ObjectMeta: metav1.ObjectMeta{Name: SeedName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.SeedSpec{SecretName: SecretName},
+		}
+		Expect(k8sClient.Create(ctx, seed)).To(Succeed())
+		reconcileSeed()
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: SecretName, Namespace: Namespace}})).To(Succeed())
+		reconcileSeed()
+
+		foundSeed := &bitcoinv1alpha1.Seed{}
+		Expect(k8sClient.Get(ctx, seedKey, foundSeed)).To(Succeed())
+		ready := meta.FindStatusCondition(foundSeed.Status.Conditions, "Ready")
+		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
+		Expect(ready.Reason).To(Equal("SeedMaterialLost"))
+		Expect(errors.IsNotFound(k8sClient.Get(ctx, secretKey, &corev1.Secret{}))).To(BeTrue())
+	})
+
+	It("republishes imported seed material if the retained output Secret is deleted", func() {
+		input := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: ImportSecretName, Namespace: Namespace},
+			StringData: map[string]string{"mnemonic": Mnemonic, "passphrase": Passphrase},
+		}
+		Expect(k8sClient.Create(ctx, input)).To(Succeed())
+		seed := &bitcoinv1alpha1.Seed{
+			ObjectMeta: metav1.ObjectMeta{Name: SeedName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.SeedSpec{
+				SecretName: SecretName,
+				Import: &bitcoinv1alpha1.SeedImport{SecretName: ImportSecretName},
+			},
+		}
+		Expect(k8sClient.Create(ctx, seed)).To(Succeed())
+		reconcileSeed()
+		Expect(k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: SecretName, Namespace: Namespace}})).To(Succeed())
+		reconcileSeed()
+
+		found := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, secretKey, found)).To(Succeed())
+		Expect(found.Data["mnemonic"]).To(Equal([]byte(Mnemonic)))
+		Expect(found.Data["passphrase"]).To(Equal([]byte(Passphrase)))
+	})
+
+	It("rejects Seed derivation configuration changes", func() {
+		seed := &bitcoinv1alpha1.Seed{
+			ObjectMeta: metav1.ObjectMeta{Name: SeedName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.SeedSpec{SecretName: SecretName, Network: "simnet"},
+		}
+		Expect(k8sClient.Create(ctx, seed)).To(Succeed())
+		found := &bitcoinv1alpha1.Seed{}
+		Expect(k8sClient.Get(ctx, seedKey, found)).To(Succeed())
+		found.Spec.Network = "mainnet"
+		Expect(k8sClient.Update(ctx, found)).ToNot(Succeed())
+	})
+
 	It("retains generated seed material after Seed deletion and reuses it on recreation", func() {
 		seed := &bitcoinv1alpha1.Seed{
 			ObjectMeta: metav1.ObjectMeta{Name: SeedName, Namespace: Namespace},
