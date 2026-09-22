@@ -16,7 +16,7 @@ The current implementation is intentionally focused rather than generic:
 Kiln currently optimizes for one thing: making a Bitcoin-backed LND node behave predictably under normal Kubernetes operations such as pod replacement, controller restart, rescheduling, and custom-resource deletion/recreation.
 
 > [!IMPORTANT]
-> Kiln is still under active development. The current work has concentrated on lifecycle safety and recovery. Mainnet requires explicit opt-in. Automated backups, stronger seed custody, and application-level payment or invoice APIs are not yet part of the supported contract.
+> Kiln is still under active development. The current work has concentrated on lifecycle safety and recovery. Mainnet requires explicit opt-in. Kiln retains LND's native static channel backup inside Kubernetes, but external backup replication, stronger seed custody, and application-level payment or invoice APIs are not yet part of the supported contract.
 
 ## What Kiln manages
 
@@ -97,6 +97,20 @@ Kiln adds the Kubernetes Service DNS name to the LND TLS certificate and disable
 The TLS certificate is stored with the persisted LND state. Pod replacement must not rotate the node's self-signed certificate merely because the pod IP changed.
 
 This matters because Kiln publishes that certificate as client trust material.
+
+### Static channel backup
+
+Kiln continuously copies LND's native `channel.backup` Static Channel Backup (SCB) into a retained Kubernetes Secret named:
+
+```text
+<lightning-node-name>-scb
+```
+
+The backup Secret is intentionally **not** owned by the `LightningNode`. Deleting and recreating the custom resource therefore does not garbage-collect the recovery artifact. On recreation, Kiln reuses the retained Secret only when it carries Kiln's explicit backup annotation for that node; it will not silently adopt an unrelated Secret with the same name.
+
+`BackupReady=True` means a non-empty SCB has been published. Backup publication is observed independently from node readiness: a temporary backup publication failure does not claim that an otherwise healthy LND node is unusable.
+
+The SCB is an LND recovery artifact, not a replacement for wallet seed custody or durable off-cluster backups. Production operators should replicate the retained Secret into a storage system with failure characteristics independent of the Kubernetes cluster.
 
 ## Network and mainnet safety
 
@@ -343,6 +357,7 @@ The controller exposes these conditions:
 | `StorageFenced` | The Lightning volume is restricted to one pod |
 | `WalletReady` | The LND wallet is initialized/unlocked |
 | `CredentialsReady` | Restricted client TLS/macaroons have been published |
+| `BackupReady` | LND's native `channel.backup` has been published to the retained SCB Secret |
 | `RuntimeReady` | Authenticated LND `GetInfo` succeeds |
 | `Ready` | The node is usable through its authenticated LND API |
 
@@ -388,6 +403,8 @@ The test creates a real btcd + LND stack and verifies that the same LND identity
 6. `LightningNode` recreation against the retained PVC
 
 The test also confirms that an independent client pod can authenticate to LND through the published Service/Secret before and after recovery. It exercises declarative peer/channel creation, crash-safe channel rediscovery, peer deletion blocking while a channel still depends on it, cooperative channel close, and automatic resumption of the pending peer deletion afterward.
+
+After opening a real channel, the E2E waits for a non-empty retained SCB Secret, verifies it survives an operator restart, and verifies the same Secret survives complete `LightningNode` deletion/recreation alongside the retained LND PVC.
 
 The destructive E2E is intentionally not run for every repository change. It runs:
 
@@ -480,6 +497,7 @@ Current defaults intentionally favor limited authority:
 - existing unrelated Secrets are never silently adopted
 - LND state uses single-pod storage fencing
 - persistent Lightning state is retained rather than silently destroyed
+- LND static channel backups are continuously published to a retained, node-specific Secret
 
 Kiln does not currently provide automated seed custody or external backup storage. Operators remain responsible for the durability and security characteristics of the Kubernetes storage and Secret systems beneath Kiln.
 
@@ -503,6 +521,7 @@ Implemented:
 - explicit network/mainnet guardrails
 - derived Lightning network identity from the referenced Bitcoin backend
 - destructive real-cluster recovery testing
+- retained LND static channel backup publication
 
 Next areas under consideration:
 

@@ -71,6 +71,10 @@ var _ = Describe("LightningNode controller", func() {
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: lightningOperatorRPCSecretName(lightningNode), Namespace: Namespace}, operatorSecret); err == nil {
 				Expect(k8sClient.Delete(ctx, operatorSecret)).To(Succeed())
 			}
+			backupSecret := &corev1.Secret{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: lightningBackupSecretName(lightningNode), Namespace: Namespace}, backupSecret); err == nil {
+				Expect(k8sClient.Delete(ctx, backupSecret)).To(Succeed())
+			}
 			publisherName := lightningRPCPublisherName(lightningNode)
 			serviceAccount := &corev1.ServiceAccount{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, serviceAccount); err == nil {
@@ -148,7 +152,9 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(publisher.Args[0]).To(ContainSubstring("readonly.macaroon"))
 		Expect(publisher.Args[0]).To(ContainSubstring("invoice.macaroon"))
 		Expect(publisher.Args[0]).To(ContainSubstring("admin.macaroon"))
+		Expect(publisher.Args[0]).To(ContainSubstring("channel.backup"))
 		Expect(publisher.Args[0]).To(ContainSubstring("OPERATOR_RPC_SECRET_NAME"))
+		Expect(publisher.Args[0]).To(ContainSubstring("BACKUP_SECRET_NAME"))
 		Expect(statefulSet.Spec.Template.Spec.ServiceAccountName).To(Equal(lightningRPCPublisherName(lightningNode)))
 		Expect(lnd.Image).To(Equal("docker.io/lightninglabs/lnd:v0.21.0-beta"))
 		Expect(lnd.Args).To(ContainElements(
@@ -180,6 +186,13 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(operatorSecret.Data).To(BeEmpty())
 		Expect(operatorSecret.Annotations["bitcoin.kiln-fired.github.io/internal"]).To(Equal("true"))
 
+		backupSecret := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lightningBackupSecretName(lightningNode), Namespace: Namespace}, backupSecret)).To(Succeed())
+		Expect(backupSecret.Data).To(BeEmpty())
+		Expect(backupSecret.OwnerReferences).To(BeEmpty())
+		Expect(backupSecret.Annotations["bitcoin.kiln-fired.github.io/backup-for"]).To(Equal(lightningNode.Name))
+		Expect(backupSecret.Annotations["bitcoin.kiln-fired.github.io/retained"]).To(Equal("true"))
+
 		publisherName := lightningRPCPublisherName(lightningNode)
 		serviceAccount := &corev1.ServiceAccount{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, serviceAccount)).To(Succeed())
@@ -189,6 +202,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(role.Rules[0].ResourceNames).To(ConsistOf(
 			lightningRPCSecretName(lightningNode),
 			lightningOperatorRPCSecretName(lightningNode),
+			lightningBackupSecretName(lightningNode),
 		))
 		Expect(role.Rules[0].Verbs).To(ConsistOf("get", "update", "patch"))
 		roleBinding := &rbacv1.RoleBinding{}
@@ -211,6 +225,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(foundLightningNode.Status.RPCSecretName).To(Equal(lightningRPCSecretName(lightningNode)))
 		Expect(foundLightningNode.Status.RPCAddress).To(Equal("test-lightning.test-lightning-namespace.svc.cluster.local:10009"))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "CredentialsReady").Status).To(Equal(metav1.ConditionFalse))
+		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "BackupReady").Status).To(Equal(metav1.ConditionFalse))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionFalse))
 
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lightningRPCSecretName(lightningNode), Namespace: Namespace}, rpcSecret)).To(Succeed())
@@ -220,6 +235,9 @@ var _ = Describe("LightningNode controller", func() {
 			"invoice.macaroon":  []byte("invoice"),
 		}
 		Expect(k8sClient.Update(ctx, rpcSecret)).To(Succeed())
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lightningBackupSecretName(lightningNode), Namespace: Namespace}, backupSecret)).To(Succeed())
+		backupSecret.Data = map[string][]byte{"channel.backup": []byte("static-channel-backup")}
+		Expect(k8sClient.Update(ctx, backupSecret)).To(Succeed())
 
 		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
 		Expect(err).ToNot(HaveOccurred())
@@ -227,6 +245,7 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(foundLightningNode.Status.Phase).To(Equal("Ready"))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "WalletReady").Status).To(Equal(metav1.ConditionTrue))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "CredentialsReady").Status).To(Equal(metav1.ConditionTrue))
+		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "BackupReady").Status).To(Equal(metav1.ConditionTrue))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "RuntimeReady").Status).To(Equal(metav1.ConditionTrue))
 		Expect(meta.FindStatusCondition(foundLightningNode.Status.Conditions, "Ready").Status).To(Equal(metav1.ConditionTrue))
 		Expect(foundLightningNode.Status.Runtime.IdentityPubkey).To(Equal("02kiln"))
@@ -234,6 +253,86 @@ var _ = Describe("LightningNode controller", func() {
 		Expect(foundLightningNode.Status.Runtime.BlockHeight).To(Equal(uint32(321)))
 		Expect(foundLightningNode.Status.Runtime.SyncedToChain).To(BeTrue())
 		Expect(foundLightningNode.Status.Runtime.NumActiveChannels).To(Equal(uint32(3)))
+	})
+
+	It("reconciles SCB publisher configuration onto an existing LightningNode", func() {
+		lightningNode := &bitcoinv1alpha1.LightningNode{
+			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.LightningNodeSpec{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{External: &bitcoinv1alpha1.ExternalBitcoinConnection{
+					Host: "btcd", Network: "simnet", CertSecret: "btcd-rpc-tls",
+					ApiAuthSecretName: "btcd-rpc-creds", ApiUserSecretKey: "username", ApiPasswordSecretKey: "password",
+				}},
+				Wallet: bitcoinv1alpha1.Wallet{
+					Password: bitcoinv1alpha1.WalletPassword{SecretName: "wallet", SecretKey: "password"},
+					Seed: bitcoinv1alpha1.SeedImport{SecretName: "seed"},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
+		Expect(err).ToNot(HaveOccurred())
+
+		statefulSet := &appsv1.StatefulSet{}
+		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		publisher := &statefulSet.Spec.Template.Spec.Containers[1]
+		publisher.Args[0] = "while true; do sleep 30; done"
+		publisher.Env = publisher.Env[:3]
+		Expect(k8sClient.Update(ctx, statefulSet)).To(Succeed())
+
+		role := &rbacv1.Role{}
+		publisherName := lightningRPCPublisherName(lightningNode)
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, role)).To(Succeed())
+		role.Rules[0].ResourceNames = []string{
+			lightningRPCSecretName(lightningNode),
+			lightningOperatorRPCSecretName(lightningNode),
+		}
+		Expect(k8sClient.Update(ctx, role)).To(Succeed())
+
+		_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(k8sClient.Get(ctx, lightningNodeNamespaceName, statefulSet)).To(Succeed())
+		publisher = &statefulSet.Spec.Template.Spec.Containers[1]
+		Expect(publisher.Args[0]).To(ContainSubstring("channel.backup"))
+		Expect(publisher.Env).To(ContainElement(HaveField("Name", "BACKUP_SECRET_NAME")))
+
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: publisherName, Namespace: Namespace}, role)).To(Succeed())
+		Expect(role.Rules[0].ResourceNames).To(ConsistOf(
+			lightningRPCSecretName(lightningNode),
+			lightningOperatorRPCSecretName(lightningNode),
+			lightningBackupSecretName(lightningNode),
+		))
+
+		backupSecret := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: lightningBackupSecretName(lightningNode), Namespace: Namespace}, backupSecret)).To(Succeed())
+		Expect(backupSecret.OwnerReferences).To(BeEmpty())
+	})
+
+	It("refuses to adopt an unrelated retained backup Secret", func() {
+		lightningNode := &bitcoinv1alpha1.LightningNode{
+			ObjectMeta: metav1.ObjectMeta{Name: LightningNodeName, Namespace: Namespace},
+			Spec: bitcoinv1alpha1.LightningNodeSpec{
+				BitcoinConnection: bitcoinv1alpha1.BitcoinConnection{External: &bitcoinv1alpha1.ExternalBitcoinConnection{
+					Host: "btcd", Network: "simnet", CertSecret: "btcd-rpc-tls",
+					ApiAuthSecretName: "btcd-rpc-creds", ApiUserSecretKey: "username", ApiPasswordSecretKey: "password",
+				}},
+				Wallet: bitcoinv1alpha1.Wallet{
+					Password: bitcoinv1alpha1.WalletPassword{SecretName: "wallet", SecretKey: "password"},
+					Seed: bitcoinv1alpha1.SeedImport{SecretName: "seed"},
+				},
+			},
+		}
+		unrelated := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name: lightningBackupSecretName(lightningNode), Namespace: Namespace,
+		}}
+		Expect(k8sClient.Create(ctx, unrelated)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, unrelated) })
+
+		Expect(k8sClient.Create(ctx, lightningNode)).To(Succeed())
+		_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: lightningNodeNamespaceName})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("is not a retained backup"))
 	})
 
 	It("refuses to grant publisher access to an unrelated Secret", func() {
