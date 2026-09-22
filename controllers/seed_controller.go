@@ -71,6 +71,13 @@ func (r *SeedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, err
 	}
 
+	if seed.Spec.Import == nil {
+		ready := meta.FindStatusCondition(seed.Status.Conditions, "Ready")
+		if ready != nil && ready.Status == metav1.ConditionTrue {
+			return r.fail(ctx, seed, "SeedMaterialLost", "retained generated seed Secret is missing and cannot be regenerated safely")
+		}
+	}
+
 	mnemonic, passphrase, reason, err := r.resolveSeedInput(ctx, seed)
 	if err != nil {
 		return r.fail(ctx, seed, reason, err.Error())
