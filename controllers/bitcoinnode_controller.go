@@ -18,7 +18,9 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/btcsuite/btcd/rpcclient"
@@ -291,17 +293,34 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	log.Info("Retrieved block count", "count", blockCount)
 
-	peer := bitcoinNode.Spec.Peer
-
-	if peer != "" {
-		perm := "perm"
-		err := btcdClient.Node("connect", peer, &perm)
-		if err != nil {
-			log.Info("Failed to add peer", "error", err.Error())
-			return ctrl.Result{}, err
-		}
-		log.Info("Connected to peer", "peer", peer)
+	managedPeers, err := reconcileBitcoinPeers(btcdClient, bitcoinNode.Spec.Peers, bitcoinNode.Status.ManagedPeers)
+	if err != nil {
+		log.Error(err, "Failed to reconcile persistent Bitcoin peers")
+		meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+			Type:               "PeersReady",
+			Status:             metav1.ConditionFalse,
+			Reason:             "PeerReconcileFailed",
+			Message:            "persistent Bitcoin peers could not be reconciled",
+			ObservedGeneration: bitcoinNode.Generation,
+		})
+		meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			Reason:             "PeerReconcileFailed",
+			Message:            "persistent Bitcoin peers could not be reconciled",
+			ObservedGeneration: bitcoinNode.Generation,
+		})
+		_ = r.Status().Update(ctx, bitcoinNode)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
+	bitcoinNode.Status.ManagedPeers = managedPeers
+	meta.SetStatusCondition(&bitcoinNode.Status.Conditions, metav1.Condition{
+		Type:               "PeersReady",
+		Status:             metav1.ConditionTrue,
+		Reason:             "DesiredPeersReconciled",
+		Message:            fmt.Sprintf("%d persistent Bitcoin peer(s) managed by Kiln", len(managedPeers)),
+		ObservedGeneration: bitcoinNode.Generation,
+	})
 
 	minBlocks := bitcoinNode.Spec.Mining.MinBlocks
 
@@ -350,6 +369,73 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+type bitcoinPeerRPC interface {
+	AddNode(host string, command rpcclient.AddNodeCommand) error
+	RawRequest(method string, params []json.RawMessage) (json.RawMessage, error)
+}
+
+func reconcileBitcoinPeers(client bitcoinPeerRPC, desired, managed []string) ([]string, error) {
+	actual, err := getPersistentBitcoinPeers(client)
+	if err != nil {
+		return nil, err
+	}
+	actualSet := stringSet(actual)
+	desiredSet := stringSet(desired)
+	managedSet := stringSet(managed)
+
+	for peer := range managedSet {
+		if _, stillDesired := desiredSet[peer]; stillDesired {
+			continue
+		}
+		if _, stillPresent := actualSet[peer]; !stillPresent {
+			continue
+		}
+		if err := client.AddNode(peer, rpcclient.ANRemove); err != nil {
+			return nil, fmt.Errorf("remove persistent peer %q: %w", peer, err)
+		}
+		delete(actualSet, peer)
+	}
+
+	for peer := range desiredSet {
+		if _, present := actualSet[peer]; present {
+			continue
+		}
+		if err := client.AddNode(peer, rpcclient.ANAdd); err != nil {
+			return nil, fmt.Errorf("add persistent peer %q: %w", peer, err)
+		}
+		actualSet[peer] = struct{}{}
+	}
+
+	result := make([]string, 0, len(desiredSet))
+	for peer := range desiredSet {
+		result = append(result, peer)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+func getPersistentBitcoinPeers(client bitcoinPeerRPC) ([]string, error) {
+	raw, err := client.RawRequest("getaddednodeinfo", []json.RawMessage{json.RawMessage("false")})
+	if err != nil {
+		return nil, fmt.Errorf("list persistent peers: %w", err)
+	}
+	var peers []string
+	if err := json.Unmarshal(raw, &peers); err != nil {
+		return nil, fmt.Errorf("decode persistent peers: %w", err)
+	}
+	return peers, nil
+}
+
+func stringSet(values []string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value != "" {
+			result[value] = struct{}{}
+		}
+	}
+	return result
 }
 
 func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode, resourceName string) *appsv1.StatefulSet {
