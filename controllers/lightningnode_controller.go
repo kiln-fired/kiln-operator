@@ -479,7 +479,11 @@ func (r *LightningNodeReconciler) resolveBitcoinConnection(ctx context.Context, 
 			return resolvedBitcoinConnection{}, false, nil
 		}
 
-		bitcoinResourceName, err := resolveBitcoinNodeOwnedResourceName(ctx, r.Client, bitcoinNode)
+		reader := r.APIReader
+		if reader == nil {
+			reader = r.Client
+		}
+		bitcoinResourceName, err := resolveBitcoinNodeOwnedResourceName(ctx, r.Client, reader, bitcoinNode)
 		if err != nil {
 			return resolvedBitcoinConnection{}, false, err
 		}
