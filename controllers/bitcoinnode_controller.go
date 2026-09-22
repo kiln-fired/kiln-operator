@@ -44,7 +44,8 @@ const bitcoinNodeFinalizer = "bitcoin.kiln-fired.github.io/stateful-cleanup"
 
 type BitcoinNodeReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	APIReader client.Reader
+	Scheme    *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes,verbs=get;list;watch;create;update;patch;delete
@@ -52,6 +53,7 @@ type BitcoinNodeReconciler struct {
 //+kubebuilder:rbac:groups=bitcoin.kiln-fired.github.io,resources=bitcoinnodes/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=services;secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get
 
 func resolvedBitcoinNetwork(b *bitcoinv1alpha1.BitcoinNode) string {
 	if b.Spec.Network == "" {
