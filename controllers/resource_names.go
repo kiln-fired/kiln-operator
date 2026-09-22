@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"crypto/sha256"
+	"net"
 	"encoding/hex"
 	"fmt"
 
@@ -53,10 +54,14 @@ func legacyPVCMatches(pvc *corev1.PersistentVolumeClaim, app, labelKey, resource
 }
 
 func (r *BitcoinNodeReconciler) ownedResourceName(ctx context.Context, b *bitcoinv1alpha1.BitcoinNode) (string, error) {
+	return resolveBitcoinNodeOwnedResourceName(ctx, r.Client, b)
+}
+
+func resolveBitcoinNodeOwnedResourceName(ctx context.Context, k8sClient client.Client, b *bitcoinv1alpha1.BitcoinNode) (string, error) {
 	typed := bitcoinNodeOwnedResourceName(b.Name)
 
 	current := &appsv1.StatefulSet{}
-	err := r.Get(ctx, types.NamespacedName{Name: typed, Namespace: b.Namespace}, current)
+	err := k8sClient.Get(ctx, types.NamespacedName{Name: typed, Namespace: b.Namespace}, current)
 	if err == nil {
 		if err := controlledBy(current, b, "StatefulSet"); err != nil {
 			return "", err
@@ -68,7 +73,7 @@ func (r *BitcoinNodeReconciler) ownedResourceName(ctx context.Context, b *bitcoi
 	}
 
 	legacy := &appsv1.StatefulSet{}
-	err = r.Get(ctx, types.NamespacedName{Name: b.Name, Namespace: b.Namespace}, legacy)
+	err = k8sClient.Get(ctx, types.NamespacedName{Name: b.Name, Namespace: b.Namespace}, legacy)
 	if err == nil {
 		if err := controlledBy(legacy, b, "StatefulSet"); err != nil {
 			return "", err
@@ -80,7 +85,7 @@ func (r *BitcoinNodeReconciler) ownedResourceName(ctx context.Context, b *bitcoi
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{}
-	err = r.Get(ctx, types.NamespacedName{Name: "btcd-data-" + b.Name + "-0", Namespace: b.Namespace}, pvc)
+	err = k8sClient.Get(ctx, types.NamespacedName{Name: "btcd-data-" + b.Name + "-0", Namespace: b.Namespace}, pvc)
 	if err == nil && legacyPVCMatches(pvc, "bitcoinnode", "bitcoinnode_cr", b.Name) {
 		return b.Name, nil
 	}
@@ -126,4 +131,14 @@ func (r *LightningNodeReconciler) ownedResourceName(ctx context.Context, l *bitc
 		return "", err
 	}
 	return typed, nil
+}
+
+
+func lightningNodeServiceHost(l *bitcoinv1alpha1.LightningNode) string {
+	if l.Status.RPCAddress != "" {
+		if host, _, err := net.SplitHostPort(l.Status.RPCAddress); err == nil {
+			return host
+		}
+	}
+	return lightningNodeOwnedResourceName(l.Name) + "." + l.Namespace + ".svc.cluster.local"
 }
