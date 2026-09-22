@@ -3,12 +3,13 @@ package controllers
 import (
 	"context"
 	"crypto/sha256"
-	"net"
 	"encoding/hex"
 	"fmt"
+	"net"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +42,7 @@ func typedOwnedResourceName(name, ownerType string) string {
 func controlledBy(obj metav1.Object, owner client.Object, kind string) error {
 	ref := metav1.GetControllerOf(obj)
 	if ref == nil {
-		return fmt.Errorf("%s %s/%s exists but is not controlled by %s %s", kind, obj.GetNamespace(), obj.GetName(), owner.GetObjectKind().GroupVersionKind().Kind, owner.GetName())
+		return fmt.Errorf("%s %s/%s exists but is not controlled by expected owner %s", kind, obj.GetNamespace(), obj.GetName(), owner.GetName())
 	}
 	if ref.UID != owner.GetUID() {
 		return fmt.Errorf("%s %s/%s is controlled by a different resource", kind, obj.GetNamespace(), obj.GetName())
@@ -68,7 +69,7 @@ func resolveBitcoinNodeOwnedResourceName(ctx context.Context, k8sClient client.C
 		}
 		return typed, nil
 	}
-	if client.IgnoreNotFound(err) != nil {
+	if !apierrors.IsNotFound(err) {
 		return "", err
 	}
 
@@ -80,7 +81,7 @@ func resolveBitcoinNodeOwnedResourceName(ctx context.Context, k8sClient client.C
 		}
 		return b.Name, nil
 	}
-	if client.IgnoreNotFound(err) != nil {
+	if !apierrors.IsNotFound(err) {
 		return "", err
 	}
 
@@ -89,7 +90,7 @@ func resolveBitcoinNodeOwnedResourceName(ctx context.Context, k8sClient client.C
 	if err == nil && legacyPVCMatches(pvc, "bitcoinnode", "bitcoinnode_cr", b.Name) {
 		return b.Name, nil
 	}
-	if client.IgnoreNotFound(err) != nil {
+	if !apierrors.IsNotFound(err) {
 		return "", err
 	}
 	return typed, nil
@@ -106,7 +107,7 @@ func (r *LightningNodeReconciler) ownedResourceName(ctx context.Context, l *bitc
 		}
 		return typed, nil
 	}
-	if client.IgnoreNotFound(err) != nil {
+	if !apierrors.IsNotFound(err) {
 		return "", err
 	}
 
@@ -118,7 +119,7 @@ func (r *LightningNodeReconciler) ownedResourceName(ctx context.Context, l *bitc
 		}
 		return l.Name, nil
 	}
-	if client.IgnoreNotFound(err) != nil {
+	if !apierrors.IsNotFound(err) {
 		return "", err
 	}
 
@@ -127,12 +128,11 @@ func (r *LightningNodeReconciler) ownedResourceName(ctx context.Context, l *bitc
 	if err == nil && legacyPVCMatches(pvc, "lightningnode", "lightningnode_cr", l.Name) {
 		return l.Name, nil
 	}
-	if client.IgnoreNotFound(err) != nil {
+	if !apierrors.IsNotFound(err) {
 		return "", err
 	}
 	return typed, nil
 }
-
 
 func lightningNodeServiceHost(l *bitcoinv1alpha1.LightningNode) string {
 	if l.Status.RPCAddress != "" {
