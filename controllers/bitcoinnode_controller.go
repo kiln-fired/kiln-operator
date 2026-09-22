@@ -93,13 +93,16 @@ func validateBitcoinNetworkPolicy(b *bitcoinv1alpha1.BitcoinNode) (string, strin
 	return network, "PolicyAccepted", nil
 }
 
-func (r *BitcoinNodeReconciler) stopBitcoinWorkloadForPolicy(ctx context.Context, b *bitcoinv1alpha1.BitcoinNode) (bool, error) {
+func (r *BitcoinNodeReconciler) stopBitcoinWorkloadForPolicy(ctx context.Context, b *bitcoinv1alpha1.BitcoinNode, resourceName string) (bool, error) {
 	ss := &appsv1.StatefulSet{}
-	err := r.Get(ctx, types.NamespacedName{Name: b.Name, Namespace: b.Namespace}, ss)
+	err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: b.Namespace}, ss)
 	if errors.IsNotFound(err) {
 		return false, nil
 	}
 	if err != nil {
+		return false, err
+	}
+	if err := controlledBy(ss, b, "StatefulSet"); err != nil {
 		return false, err
 	}
 	if ss.DeletionTimestamp.IsZero() {
@@ -136,6 +139,11 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
+	resourceName, err := r.ownedResourceName(ctx, bitcoinNode)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	network, networkReason, networkErr := validateBitcoinNetworkPolicy(bitcoinNode)
 	bitcoinNode.Status.Network = network
 	if networkErr != nil {
@@ -156,7 +164,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Status().Update(ctx, bitcoinNode); err != nil {
 			return ctrl.Result{}, err
 		}
-		stopping, err := r.stopBitcoinWorkloadForPolicy(ctx, bitcoinNode)
+		stopping, err := r.stopBitcoinWorkloadForPolicy(ctx, bitcoinNode, resourceName)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -183,10 +191,10 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Reconcile StatefulSet
 	foundStatefulSet := &appsv1.StatefulSet{}
-	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, foundStatefulSet)
+	err = r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: bitcoinNode.Namespace}, foundStatefulSet)
 
 	if err != nil && errors.IsNotFound(err) {
-		ss := r.statefulsetForBitcoinNode(bitcoinNode)
+		ss := r.statefulsetForBitcoinNode(bitcoinNode, resourceName)
 		log.Info("Creating a new StatefulSet", "StatefulSet.Namespace", ss.Namespace, "StatefulSet.Name", ss.Name)
 		err = r.Create(ctx, ss)
 		if err != nil {
@@ -197,14 +205,16 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	} else if err != nil {
 		log.Error(err, "Failed to get StatefulSet")
 		return ctrl.Result{}, err
+	} else if err := controlledBy(foundStatefulSet, bitcoinNode, "StatefulSet"); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Reconcile Service
 	foundService := &corev1.Service{}
-	err = r.Get(ctx, types.NamespacedName{Name: bitcoinNode.Name, Namespace: bitcoinNode.Namespace}, foundService)
+	err = r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: bitcoinNode.Namespace}, foundService)
 
 	if err != nil && errors.IsNotFound(err) {
-		svc := r.serviceForBitcoinNode(bitcoinNode)
+		svc := r.serviceForBitcoinNode(bitcoinNode, resourceName)
 		log.Info("Creating a new Service", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
 		err = r.Create(ctx, svc)
 		if err != nil {
@@ -214,6 +224,8 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
 		log.Error(err, "Failed to get Service")
+		return ctrl.Result{}, err
+	} else if err := controlledBy(foundService, bitcoinNode, "Service"); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -239,7 +251,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	rpcPass := string(foundCredSecret.Data[bitcoinNode.Spec.RPCServer.ApiPasswordSecretKey])
 
 	connCfg := &rpcclient.ConnConfig{
-		Host:         bitcoinNode.Name + "." + bitcoinNode.Namespace + "." + "svc.cluster.local:18556",
+		Host:         resourceName + "." + bitcoinNode.Namespace + ".svc.cluster.local:18556",
 		User:         rpcUser,
 		Pass:         rpcPass,
 		Certificates: caCert,
@@ -338,7 +350,7 @@ func (r *BitcoinNodeReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode) *appsv1.StatefulSet {
+func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode, resourceName string) *appsv1.StatefulSet {
 	ls := labelsForBitcoinNode(b.Name)
 	size := int32(1)
 
@@ -368,7 +380,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 		},
 		{
 			Name:  "RPCSERVER",
-			Value: b.Name + "." + b.Namespace + ".svc.cluster.local:18556",
+			Value: resourceName + "." + b.Namespace + ".svc.cluster.local:18556",
 		},
 		{
 			Name: "RPCUSER",
@@ -561,7 +573,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 
 	ss := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      b.Name,
+			Name:      resourceName,
 			Namespace: b.Namespace,
 		},
 		Spec: appsv1.StatefulSetSpec{
@@ -569,7 +581,7 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
-			ServiceName: b.Name,
+			ServiceName: resourceName,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.OnDeleteStatefulSetStrategyType,
 			},
@@ -629,13 +641,13 @@ func (r *BitcoinNodeReconciler) statefulsetForBitcoinNode(b *bitcoinv1alpha1.Bit
 	return ss
 }
 
-func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode) *corev1.Service {
+func (r *BitcoinNodeReconciler) serviceForBitcoinNode(b *bitcoinv1alpha1.BitcoinNode, resourceName string) *corev1.Service {
 	ls := labelsForBitcoinNode(b.Name)
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    ls,
-			Name:      b.Name,
+			Name:      resourceName,
 			Namespace: b.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -672,13 +684,20 @@ func (r *BitcoinNodeReconciler) finalizeBitcoinNode(ctx context.Context, b *bitc
 		return ctrl.Result{}, nil
 	}
 
+	resourceName, err := r.ownedResourceName(ctx, b)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	ss := &appsv1.StatefulSet{}
-	err := r.Get(ctx, types.NamespacedName{Name: b.Name, Namespace: b.Namespace}, ss)
+	err = r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: b.Namespace}, ss)
 	if err != nil && !errors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
 
 	if err == nil {
+		if err := controlledBy(ss, b, "StatefulSet"); err != nil {
+			return ctrl.Result{}, err
+		}
 		if ss.DeletionTimestamp.IsZero() {
 			propagation := metav1.DeletePropagationForeground
 			if err := r.Delete(ctx, ss, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
