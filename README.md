@@ -24,15 +24,15 @@ Kiln currently provides five first-class APIs.
 
 | Resource | Purpose |
 | --- | --- |
-| <code>BitcoinNode</code> | Runs persistent btcd infrastructure and exposes RPC |
-| <code>LightningNode</code> | Runs persistent LND backed by a managed or external Bitcoin node |
-| <code>LightningPeer</code> | Declares durable desired LND peer connectivity |
-| <code>LightningChannel</code> | Declares a funded Lightning channel and its lifecycle |
-| <code>Seed</code> | Generates or imports LND-compatible seed material through Kubernetes Secrets |
+| `BitcoinNode` | Runs persistent btcd infrastructure and exposes RPC |
+| `LightningNode` | Runs persistent LND backed by a managed or external Bitcoin node |
+| `LightningPeer` | Declares durable desired LND peer connectivity |
+| `LightningChannel` | Declares a funded Lightning channel and its lifecycle |
+| `Seed` | Generates or imports LND-compatible seed material through Kubernetes Secrets |
 
 The resource graph is declarative and reference-based:
 
-~~~mermaid
+```mermaid
 flowchart TD
     B[BitcoinNode]
     L[LightningNode]
@@ -53,7 +53,7 @@ flowchart TD
     L --> LPVC
     L -->|publishes| R
     L -->|publishes| SCB
-~~~
+```
 
 References are same-namespace and fixed-kind. Kiln CRs do not form a Kubernetes ownership tree with one another. Ownership is reserved for implementation resources such as StatefulSets and Services, while recovery artifacts may deliberately outlive the CR that produced them.
 
@@ -62,14 +62,14 @@ References are same-namespace and fixed-kind. Kiln CRs do not form a Kubernetes 
 The most important behaviors are explicit rather than incidental:
 
 - persistent Bitcoin and Lightning storage
-- <code>ReadWriteOncePod</code> fencing for stateful workloads
+- `ReadWriteOncePod` fencing for stateful workloads
 - graceful node shutdown and finalizer-based deletion
 - retained LND identity across pod and CR recreation
 - retained LND Static Channel Backups
 - retained Seed output Secrets
 - Secret-backed seed import instead of plaintext mnemonic/passphrase fields
-- restricted LND client credentials without exporting <code>admin.macaroon</code>
-- authenticated LND runtime readiness through <code>GetInfo</code>
+- restricted LND client credentials without exporting `admin.macaroon`
+- authenticated LND runtime readiness through `GetInfo`
 - explicit mainnet opt-in
 - declarative Bitcoin persistent peer sets
 - declarative Lightning peer and channel reconciliation
@@ -80,9 +80,9 @@ The most important behaviors are explicit rather than incidental:
 
 | Component | Default |
 | --- | --- |
-| Bitcoin | <code>ghcr.io/btcsuite/btcd:v0.26.2</code> |
-| Lightning | <code>docker.io/lightninglabs/lnd:v0.21.0-beta</code> |
-| Wallet init | <code>docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta</code> |
+| Bitcoin | `ghcr.io/btcsuite/btcd:v0.26.2` |
+| Lightning | `docker.io/lightninglabs/lnd:v0.21.0-beta` |
+| Wallet init | `docker.io/lightninglabs/lndinit:v0.1.36-beta-lnd-v0.21.0-beta` |
 | Go | 1.26 |
 | Kubernetes libraries | 0.37 |
 | controller-runtime | 0.25 |
@@ -93,7 +93,7 @@ Container images remain configurable, but Kiln does not currently abstract acros
 
 A managed LND node references a same-namespace Bitcoin node:
 
-~~~yaml
+```yaml
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: BitcoinNode
 metadata:
@@ -123,7 +123,7 @@ spec:
       secretName: lnd-seed
       mnemonicKey: mnemonic
       passphraseKey: passphrase
-~~~
+```
 
 See [config/samples](config/samples) for complete examples.
 
@@ -133,8 +133,8 @@ Fresh node workloads use type-qualified child names so different CR kinds may sa
 
 | CR | StatefulSet | Service |
 | --- | --- | --- |
-| <code>BitcoinNode/foo</code> | <code>foo-bitcoin</code> | <code>foo-bitcoin</code> |
-| <code>LightningNode/foo</code> | <code>foo-lightning</code> | <code>foo-lightning</code> |
+| `BitcoinNode/foo` | `foo-bitcoin` | `foo-bitcoin` |
+| `LightningNode/foo` | `foo-lightning` | `foo-lightning` |
 
 Kiln verifies controller ownership before using, mutating, or deleting an existing child resource. It will not adopt an unrelated StatefulSet, Service, or Secret merely because its name matches.
 
@@ -142,37 +142,37 @@ Existing installations remain recovery-compatible. If Kiln finds an owned legacy
 
 ## BitcoinNode
 
-<code>BitcoinNode</code> manages a persistent btcd node, its RPC Service, storage, network safety policy, mining controls for development networks, and an optional desired set of persistent peers.
+`BitcoinNode` manages a persistent btcd node, its RPC Service, storage, network safety policy, mining controls for development networks, and an optional desired set of persistent peers.
 
 ### Storage
 
 Storage capacity and StorageClass are configured at creation time:
 
-~~~yaml
+```yaml
 spec:
   storage:
     size: 1Ti
     storageClassName: fast-storage
-~~~
+```
 
 Defaults:
 
-- size: <code>2Gi</code>
+- size: `2Gi`
 - StorageClass: cluster default
-- access mode: <code>ReadWriteOncePod</code>
+- access mode: `ReadWriteOncePod`
 
 The storage configuration is immutable. Kiln does not treat CR edits as a generic PVC resize or migration mechanism. Retained PVCs remain authoritative during deletion/recreation recovery.
 
 ### Persistent peers
 
-<code>spec.peers</code> declares the persistent btcd peers Kiln should manage:
+`spec.peers` declares the persistent btcd peers Kiln should manage:
 
-~~~yaml
+```yaml
 spec:
   peers:
     - node-a.example.com:8333
     - node-b.example.com:8333
-~~~
+```
 
 Kiln treats this as a desired set:
 
@@ -182,42 +182,42 @@ Kiln treats this as a desired set:
 - manually-added persistent peers outside Kiln are preserved
 - DNS-discovered and transient peers are unaffected
 
-<code>status.managedPeers</code> records Kiln's ownership boundary and <code>PeersReady</code> reports reconciliation health.
+`status.managedPeers` records Kiln's ownership boundary and `PeersReady` reports reconciliation health.
 
-An empty <code>spec.peers</code> means "Kiln manages no static peers." It does not mean "disconnect the node from Bitcoin."
+An empty `spec.peers` means "Kiln manages no static peers." It does not mean "disconnect the node from Bitcoin."
 
 ## LightningNode
 
-<code>LightningNode</code> manages persistent LND identity, wallet initialization, Bitcoin dependency resolution, restricted RPC publication, runtime status, and recovery artifacts.
+`LightningNode` manages persistent LND identity, wallet initialization, Bitcoin dependency resolution, restricted RPC publication, runtime status, and recovery artifacts.
 
 ### Persistent identity
 
-LND stores state on a retained <code>ReadWriteOncePod</code> PVC. The StatefulSet uses:
+LND stores state on a retained `ReadWriteOncePod` PVC. The StatefulSet uses:
 
 - one replica
-- <code>ReadWriteOncePod</code> fencing
-- <code>OnDelete</code> update strategy
+- `ReadWriteOncePod` fencing
+- `OnDelete` update strategy
 - retained PVCs on StatefulSet deletion or scale-down
 - a 60-second termination grace period
-- graceful <code>lncli stop</code>
+- graceful `lncli stop`
 
 Wallet initialization is idempotent through lndinit. If wallet state already exists, Kiln validates and reuses it rather than creating a new identity.
 
 ### Bitcoin dependency
 
-A managed LND node references a <code>BitcoinNode</code>:
+A managed LND node references a `BitcoinNode`:
 
-~~~yaml
+```yaml
 spec:
   bitcoinConnection:
     nodeRef: btcd
-~~~
+```
 
 Kiln derives the Bitcoin network, Service hostname, TLS Secret, and RPC credential references from that node.
 
 An external Bitcoin backend can be declared instead:
 
-~~~yaml
+```yaml
 spec:
   bitcoinConnection:
     external:
@@ -227,15 +227,15 @@ spec:
       apiAuthSecretName: btcd-rpc-creds
       apiUserSecretKey: username
       apiPasswordSecretKey: password
-~~~
+```
 
-Exactly one of <code>nodeRef</code> or <code>external</code> is allowed.
+Exactly one of `nodeRef` or `external` is allowed.
 
 ### Runtime readiness
 
-Pod readiness is not enough to mark LND healthy. Kiln performs an authenticated LND <code>GetInfo</code> call and exposes the observed runtime state.
+Pod readiness is not enough to mark LND healthy. Kiln performs an authenticated LND `GetInfo` call and exposes the observed runtime state.
 
-~~~yaml
+```yaml
 status:
   phase: Ready
   rpcAddress: lnd-lightning.bitcoin.svc.cluster.local:10009
@@ -251,52 +251,52 @@ status:
     numPendingChannels: 0
     numActiveChannels: 3
     numInactiveChannels: 0
-~~~
+```
 
 Important conditions include:
 
 | Condition | Meaning |
 | --- | --- |
-| <code>NetworkReady</code> | Network and mainnet policy are valid |
-| <code>BitcoinReady</code> | The configured Bitcoin backend is available |
-| <code>StorageFenced</code> | The Lightning volume is restricted to one pod |
-| <code>WalletReady</code> | The wallet is initialized and usable |
-| <code>CredentialsReady</code> | Restricted client credentials are published |
-| <code>BackupReady</code> | A non-empty LND Static Channel Backup is published |
-| <code>RuntimeReady</code> | Authenticated LND <code>GetInfo</code> succeeds |
-| <code>Ready</code> | The node is operational |
+| `NetworkReady` | Network and mainnet policy are valid |
+| `BitcoinReady` | The configured Bitcoin backend is available |
+| `StorageFenced` | The Lightning volume is restricted to one pod |
+| `WalletReady` | The wallet is initialized and usable |
+| `CredentialsReady` | Restricted client credentials are published |
+| `BackupReady` | A non-empty LND Static Channel Backup is published |
+| `RuntimeReady` | Authenticated LND `GetInfo` succeeds |
+| `Ready` | The node is operational |
 
 ### Restricted client access
 
 Kiln publishes a client Secret, by default:
 
-~~~text
+```text
 <lightning-node-name>-rpc
-~~~
+```
 
 It contains:
 
 | Key | Purpose |
 | --- | --- |
-| <code>tls.cert</code> | Trust the LND endpoint |
-| <code>readonly.macaroon</code> | Read-only LND access |
-| <code>invoice.macaroon</code> | Invoice-oriented LND access |
+| `tls.cert` | Trust the LND endpoint |
+| `readonly.macaroon` | Read-only LND access |
+| `invoice.macaroon` | Invoice-oriented LND access |
 
-Kiln does not export <code>admin.macaroon</code>.
+Kiln does not export `admin.macaroon`.
 
-~~~shell
+```shell
 lncli --network simnet \
   --rpcserver lnd-lightning.bitcoin.svc.cluster.local:10009 \
   --tlscertpath ./tls.cert \
   --macaroonpath ./readonly.macaroon \
   getinfo
-~~~
+```
 
 ## LightningPeer
 
-<code>LightningPeer</code> represents durable desired connectivity, not a one-shot <code>lncli connect</code>.
+`LightningPeer` represents durable desired connectivity, not a one-shot `lncli connect`.
 
-~~~yaml
+```yaml
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: LightningPeer
 metadata:
@@ -305,19 +305,19 @@ spec:
   nodeRef: lnd
   pubkey: 02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   address: peer.example.com:9735
-~~~
+```
 
 Kiln observes LND before taking action. If the peer is already connected, reconciliation is satisfied. If it is absent, Kiln waits for the referenced Lightning node to be usable before requesting a persistent connection.
 
-<code>nodeRef</code> and <code>pubkey</code> are immutable. The address may be updated and is used the next time a connection must be established.
+`nodeRef` and `pubkey` are immutable. The address may be updated and is used the next time a connection must be established.
 
-Deleting a <code>LightningPeer</code> is blocked while a <code>LightningChannel</code> still references it. Once dependent channels are gone, Kiln requests a clean LND disconnect before releasing the finalizer.
+Deleting a `LightningPeer` is blocked while a `LightningChannel` still references it. Once dependent channels are gone, Kiln requests a clean LND disconnect before releasing the finalizer.
 
 ## LightningChannel
 
-<code>LightningChannel</code> represents a channel that should exist through a declared <code>LightningPeer</code>.
+`LightningChannel` represents a channel that should exist through a declared `LightningPeer`.
 
-~~~yaml
+```yaml
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: LightningChannel
 metadata:
@@ -327,11 +327,11 @@ spec:
   capacitySats: 100000
   private: true
   minConfs: 1
-~~~
+```
 
 Kiln observes LND before funding. Existing pending or open Kiln-owned channels are rediscovered rather than duplicated.
 
-Each funding workflow is tagged with a memo derived from the <code>LightningChannel</code> UID. LND persists that memo in pending and open channel records, giving Kiln durable ownership identity across controller restarts and crash windows.
+Each funding workflow is tagged with a memo derived from the `LightningChannel` UID. LND persists that memo in pending and open channel records, giving Kiln durable ownership identity across controller restarts and crash windows.
 
 Kiln does not adopt unrelated channels merely because they share a peer or capacity.
 
@@ -339,13 +339,13 @@ Deletion reconciles toward channel absence through cooperative close. Kiln does 
 
 ## Seed
 
-<code>Seed</code> is a development-oriented helper for generating or importing LND-compatible aezeed material.
+`Seed` is a development-oriented helper for generating or importing LND-compatible aezeed material.
 
 Sensitive mnemonic and passphrase values are never stored directly in the Seed custom resource.
 
 Generate new material:
 
-~~~yaml
+```yaml
 apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
 kind: Seed
 metadata:
@@ -353,11 +353,11 @@ metadata:
 spec:
   secretName: lnd-seed
   network: simnet
-~~~
+```
 
 Import existing material from another Secret:
 
-~~~yaml
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -377,21 +377,21 @@ spec:
     secretName: lnd-seed-import
     mnemonicKey: mnemonic
     passphraseKey: passphrase
-~~~
+```
 
 Kiln publishes the resulting mnemonic, passphrase, and derived root key only into the output Secret.
 
-The output Secret is intentionally retained independently of the <code>Seed</code> CR. Deleting and recreating the CR therefore does not garbage-collect recovery material.
+The output Secret is intentionally retained independently of the `Seed` CR. Deleting and recreating the CR therefore does not garbage-collect recovery material.
 
 Existing legacy controller-owned Seed Secrets are migrated in place to retained semantics without changing their bytes.
 
-If a previously-ready generated Seed Secret disappears, Kiln reports <code>SeedMaterialLost</code> instead of silently generating a different wallet identity. Imported seed output can be reconstructed from the declared source Secret.
+If a previously-ready generated Seed Secret disappears, Kiln reports `SeedMaterialLost` instead of silently generating a different wallet identity. Imported seed output can be reconstructed from the declared source Secret.
 
 ## Recovery model
 
 Kiln distinguishes reconstructable runtime state from identity and recovery material.
 
-~~~mermaid
+```mermaid
 flowchart LR
     BN[BitcoinNode] --> BPVC[(Retained Bitcoin PVC)]
     LN[LightningNode] --> LPVC[(Retained LND PVC)]
@@ -402,21 +402,21 @@ flowchart LR
     LPVC -->|wallet + identity + channel DB| LN
     SCB -->|channel recovery artifact| LN
     SS -->|wallet identity recovery| LN
-~~~
+```
 
 Recovery-critical artifacts deliberately do not always share the lifecycle of the CR that produced them.
 
 ### Static Channel Backup
 
-Kiln continuously copies LND's native <code>channel.backup</code> into a retained Secret named:
+Kiln continuously copies LND's native `channel.backup` into a retained Secret named:
 
-~~~text
+```text
 <lightning-node-name>-scb
-~~~
+```
 
-The Secret is not owned by the <code>LightningNode</code>, so deleting and recreating the CR does not garbage-collect the backup.
+The Secret is not owned by the `LightningNode`, so deleting and recreating the CR does not garbage-collect the backup.
 
-<code>BackupReady=True</code> means a non-empty SCB has been published.
+`BackupReady=True` means a non-empty SCB has been published.
 
 The SCB is not a replacement for wallet seed custody or off-cluster backup. Production operators should replicate recovery material into storage with failure characteristics independent of the Kubernetes cluster.
 
@@ -424,32 +424,32 @@ The SCB is not a replacement for wallet seed custody or off-cluster backup. Prod
 
 Supported Bitcoin networks:
 
-- <code>simnet</code>
-- <code>testnet</code>
-- <code>regtest</code>
-- <code>signet</code>
-- <code>mainnet</code>
+- `simnet`
+- `testnet`
+- `regtest`
+- `signet`
+- `mainnet`
 
-<code>BitcoinNode</code> defaults to <code>simnet</code>. A managed <code>LightningNode</code> derives its network from the referenced Bitcoin node.
+`BitcoinNode` defaults to `simnet`. A managed `LightningNode` derives its network from the referenced Bitcoin node.
 
 Mainnet requires explicit opt-in:
 
-~~~yaml
+```yaml
 spec:
   network: mainnet
   safety:
     allowMainnet: true
-~~~
+```
 
 For a managed Lightning node:
 
-~~~yaml
+```yaml
 spec:
   bitcoinConnection:
     nodeRef: bitcoin-mainnet
   safety:
     allowMainnet: true
-~~~
+```
 
 Kiln refuses development-oriented automatic mining controls on mainnet.
 
@@ -465,7 +465,7 @@ The test exercises a real btcd + LND stack and verifies:
 - operator restart
 - LND pod deletion and recreation
 - RPC credential Secret deletion and republishing
-- complete <code>LightningNode</code> deletion and recreation against retained storage
+- complete `LightningNode` deletion and recreation against retained storage
 - stable LND identity across recovery
 - retained Static Channel Backup survival
 - generated Seed Secret survival across Seed CR deletion/recreation
@@ -475,7 +475,7 @@ The test exercises a real btcd + LND stack and verifies:
 - cooperative channel close
 - declarative Bitcoin persistent peer add/remove behavior against real btcd
 
-The destructive E2E runs on relevant PRs and pushes, nightly on <code>main</code>, and through manual workflow dispatch.
+The destructive E2E runs on relevant PRs and pushes, nightly on `main`, and through manual workflow dispatch.
 
 ## Security model
 
@@ -501,52 +501,52 @@ Kiln does not currently provide automated off-cluster backup or hardware-backed 
 
 - Go 1.26
 - Docker with BuildKit
-- <code>kubectl</code> or <code>oc</code>
+- `kubectl` or `oc`
 - access to a Kubernetes cluster for deployment testing
 
-Project tooling such as controller-gen, Kustomize, and setup-envtest is installed into <code>./bin</code> by the Makefile.
+Project tooling such as controller-gen, Kustomize, and setup-envtest is installed into `./bin` by the Makefile.
 
 ### Test
 
-~~~shell
+```shell
 make test
-~~~
+```
 
-Controller tests use controller-runtime <code>envtest</code>, so an existing cluster is not required.
+Controller tests use controller-runtime `envtest`, so an existing cluster is not required.
 
 ### Build
 
-~~~shell
+```shell
 make build
-~~~
+```
 
 ### Regenerate API artifacts
 
-~~~shell
+```shell
 make generate
 make manifests
-~~~
+```
 
 ### Run locally
 
-~~~shell
+```shell
 make install
 make run
-~~~
+```
 
 ### Build and deploy an operator image
 
-~~~shell
+```shell
 export IMG=quay.io/kiln-fired/kiln-operator:dev
 
 make docker-build IMG="$IMG"
 make docker-push IMG="$IMG"
 make deploy IMG="$IMG"
-~~~
+```
 
 ## OLM bundle
 
-~~~shell
+```shell
 export IMG=quay.io/kiln-fired/kiln-operator:latest
 export BUNDLE_IMG=quay.io/kiln-fired/kiln-operator-bundle:latest
 
@@ -555,13 +555,13 @@ make bundle-build BUNDLE_IMG="$BUNDLE_IMG"
 make bundle-push BUNDLE_IMG="$BUNDLE_IMG"
 
 operator-sdk bundle validate "$BUNDLE_IMG"
-~~~
+```
 
 For a local bundle install:
 
-~~~shell
+```shell
 operator-sdk run bundle "$BUNDLE_IMG"
-~~~
+```
 
 ## Scope
 
