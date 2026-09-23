@@ -33,6 +33,7 @@ Kiln currently provides five first-class APIs.
 The resource graph is declarative and reference-based:
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#111111","primaryColor":"#1f1f1f","primaryTextColor":"#f5f5f5","primaryBorderColor":"#ff6a00","lineColor":"#b3b3b3","secondaryColor":"#2b2b2b","tertiaryColor":"#171717","edgeLabelBackground":"#111111","fontFamily":"ui-sans-serif, system-ui, sans-serif"}}}%%
 flowchart TD
     B[BitcoinNode]
     L[LightningNode]
@@ -53,6 +54,16 @@ flowchart TD
     L --> LPVC
     L -->|publishes| R
     L -->|publishes| SCB
+
+    classDef core fill:#1f1f1f,stroke:#ff6a00,color:#f5f5f5,stroke-width:2px;
+    classDef relation fill:#2a2a2a,stroke:#8a8a8a,color:#f5f5f5,stroke-width:1.5px;
+    classDef recovery fill:#151515,stroke:#ff6a00,color:#d8d8d8,stroke-width:1.5px;
+    classDef storage fill:#151515,stroke:#686868,color:#d8d8d8,stroke-width:1.5px;
+
+    class B,L core;
+    class P,C relation;
+    class S,R,SCB recovery;
+    class BPVC,LPVC storage;
 ```
 
 References are same-namespace and fixed-kind. Kiln CRs do not form a Kubernetes ownership tree with one another. Ownership is reserved for implementation resources such as StatefulSets and Services, while recovery artifacts may deliberately outlive the CR that produced them.
@@ -392,6 +403,7 @@ If a previously-ready generated Seed Secret disappears, Kiln reports `SeedMateri
 Kiln distinguishes reconstructable runtime state from identity and recovery material.
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"#111111","primaryColor":"#1f1f1f","primaryTextColor":"#f5f5f5","primaryBorderColor":"#ff6a00","lineColor":"#b3b3b3","secondaryColor":"#2b2b2b","tertiaryColor":"#171717","edgeLabelBackground":"#111111","fontFamily":"ui-sans-serif, system-ui, sans-serif"}}}%%
 flowchart LR
     BN[BitcoinNode] --> BPVC[(Retained Bitcoin PVC)]
     LN[LightningNode] --> LPVC[(Retained LND PVC)]
@@ -402,6 +414,14 @@ flowchart LR
     LPVC -->|wallet + identity + channel DB| LN
     SCB -->|channel recovery artifact| LN
     SS -->|wallet identity recovery| LN
+
+    classDef core fill:#1f1f1f,stroke:#ff6a00,color:#f5f5f5,stroke-width:2px;
+    classDef recovery fill:#151515,stroke:#ff6a00,color:#d8d8d8,stroke-width:1.5px;
+    classDef storage fill:#151515,stroke:#686868,color:#d8d8d8,stroke-width:1.5px;
+
+    class BN,LN core;
+    class S,SCB,SS recovery;
+    class BPVC,LPVC storage;
 ```
 
 Recovery-critical artifacts deliberately do not always share the lifecycle of the CR that produced them.
