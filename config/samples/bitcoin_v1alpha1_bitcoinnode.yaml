@@ -7,6 +7,10 @@ spec:
   storage:
     size: 20Gi
     # storageClassName: fast-storage
+  # Optional persistent peer set managed by Kiln:
+  # peers:
+  #   - bitcoin-peer-a.example.com:8333
+  #   - bitcoin-peer-b.example.com:8333
   mining:
     cpuMiningEnabled: false
     rewardAddress:

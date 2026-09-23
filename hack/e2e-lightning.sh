@@ -3,9 +3,11 @@ set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-kiln-e2e}"
 BITCOIN_NODE="${BITCOIN_NODE:-btcd}"
+PEER_BITCOIN_NODE="${PEER_BITCOIN_NODE:-btcd-peer}"
 LIGHTNING_NODE="${LIGHTNING_NODE:-lnd}"
 SECOND_LIGHTNING_NODE="${SECOND_LIGHTNING_NODE:-lnd-bob}"
 BITCOIN_RESOURCE="${BITCOIN_NODE}-bitcoin"
+PEER_BITCOIN_RESOURCE="${PEER_BITCOIN_NODE}-bitcoin"
 LIGHTNING_RESOURCE="${LIGHTNING_NODE}-lightning"
 SECOND_LIGHTNING_RESOURCE="${SECOND_LIGHTNING_NODE}-lightning"
 CLIENT_POD="${CLIENT_POD:-lnd-client}"
@@ -232,7 +234,7 @@ assert_no_statefulset blocked-mainnet-lightning-lightning
 kubectl delete -f "$tmpdir/mainnet-blocked-lightning.yaml" --wait=true --timeout=60s
 kubectl delete -f "$tmpdir/mainnet-blocked-bitcoin.yaml" --wait=true --timeout=60s
 
-openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_RESOURCE,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1   -keyout "$tmpdir/btcd.key"   -out "$tmpdir/btcd.crt"   -subj "/CN=$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"   -addext "subjectAltName=DNS:$BITCOIN_RESOURCE,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc,DNS:$BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local,DNS:$PEER_BITCOIN_RESOURCE,DNS:$PEER_BITCOIN_RESOURCE.$NAMESPACE.svc,DNS:$PEER_BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local"
 
 kubectl create secret generic btcd-rpc-tls -n "$NAMESPACE"   --from-file=tls.crt="$tmpdir/btcd.crt"   --from-file=tls.key="$tmpdir/btcd.key"   --from-file=ca.crt="$tmpdir/btcd.crt"
 kubectl create secret generic btcd-rpc-creds -n "$NAMESPACE"   --from-literal=username=kiln   --from-literal=password=kiln-e2e-password
@@ -293,6 +295,44 @@ kubectl apply -f "$tmpdir/bitcoin.yaml"
 kubectl wait -n "$NAMESPACE" bitcoinnode/"$BITCOIN_NODE" --for=condition=Ready --timeout=180s
 [[ "$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.network}')" == "simnet" ]]
 [[ "$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.LastBlockCount}')" -ge 1 ]]
+
+echo "Verifying declarative Bitcoin persistent peers"
+cat >"$tmpdir/peer-bitcoin.yaml" <<EOF
+apiVersion: bitcoin.kiln-fired.github.io/v1alpha1
+kind: BitcoinNode
+metadata:
+  name: $PEER_BITCOIN_NODE
+  namespace: $NAMESPACE
+spec:
+  rpcServer:
+    certSecret: btcd-rpc-tls
+    apiAuthSecretName: btcd-rpc-creds
+    apiUserSecretKey: username
+    apiPasswordSecretKey: password
+EOF
+kubectl apply -f "$tmpdir/peer-bitcoin.yaml"
+kubectl wait -n "$NAMESPACE" bitcoinnode/"$PEER_BITCOIN_NODE" --for=condition=Ready --timeout=180s
+
+peer_address="$PEER_BITCOIN_RESOURCE.$NAMESPACE.svc.cluster.local:18555"
+kubectl patch bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" --type=merge \
+  -p "{\"spec\":{\"peers\":[\"$peer_address\"]}}" >/dev/null
+for _ in {1..60}; do
+  managed_peer="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o jsonpath='{.status.managedPeers[0]}' 2>/dev/null || true)"
+  [[ "$managed_peer" == "$peer_address" ]] && break
+  sleep 1
+done
+[[ "$managed_peer" == "$peer_address" ]]
+wait_for_condition_status bitcoinnode "$BITCOIN_NODE" PeersReady True
+
+kubectl patch bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" --type=merge \
+  -p '{"spec":{"peers":[]}}' >/dev/null
+for _ in {1..60}; do
+  managed_count="$(kubectl get bitcoinnode -n "$NAMESPACE" "$BITCOIN_NODE" -o json | jq '.status.managedPeers // [] | length')"
+  [[ "$managed_count" == "0" ]] && break
+  sleep 1
+done
+[[ "$managed_count" == "0" ]]
+kubectl delete -f "$tmpdir/peer-bitcoin.yaml" --wait=true --timeout=120s
 
 kubectl apply -f "$tmpdir/lightning.yaml"
 kubectl wait -n "$NAMESPACE" lightningnode/"$LIGHTNING_NODE" --for=condition=Ready --timeout=240s

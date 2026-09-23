@@ -123,9 +123,13 @@ type BitcoinNodeSpec struct {
 	// Configuration for the RPC Server
 	RPCServer RPCServer `json:"rpcServer,omitempty"`
 
-	// Host and port of peer to connect
+	// Persistent Bitcoin peers Kiln should manage as a desired set.
+	// Unrelated persistent peers added outside Kiln are left untouched.
 	// +optional
-	Peer string `json:"peer,omitempty"`
+	// +kubebuilder:validation:MaxItems=64
+	// +listType=set
+	// +kubebuilder:validation:items:MinLength=1
+	Peers []string `json:"peers,omitempty"`
 
 	// Mining configuration
 	// +optional
@@ -143,6 +147,10 @@ type BitcoinNodeStatus struct {
 
 	// Network is the resolved Bitcoin network.
 	Network string `json:"network,omitempty"`
+
+	// ManagedPeers records the persistent peers currently managed by Kiln.
+	// +optional
+	ManagedPeers []string `json:"managedPeers,omitempty"`
 
 	// Conditions summarize the observed lifecycle and safety state.
 	// +optional

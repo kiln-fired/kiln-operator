@@ -89,6 +89,25 @@ The defaults are a `2Gi` request and the cluster's default StorageClass. Kiln al
 
 `storage.size` and `storage.storageClassName` are immutable after creation. Kiln does not treat edits to the CR as a generic PVC migration or resize operation. Retained PVCs remain authoritative during deletion/recreation recovery, so changing storage settings cannot silently replace persisted Bitcoin data.
 
+## Bitcoin persistent peers
+
+`BitcoinNode.spec.peers` declares the persistent btcd peers Kiln should manage:
+
+```yaml
+spec:
+  peers:
+    - node-a.example.com:8333
+    - node-b.example.com:8333
+```
+
+Kiln reconciles this as a desired set using btcd's persistent peer API. Missing desired peers are added, and peers previously managed by Kiln are removed when they leave the list.
+
+Kiln deliberately does **not** treat the entire btcd peer table as owned state. DNS/discovered peers are unaffected, and persistent peers added outside Kiln are left alone. `status.managedPeers` records the persistent peers Kiln has adopted into this contract, and `PeersReady` reports whether the desired set is reconciled.
+
+An empty `spec.peers` therefore means "Kiln manages no static peers", not "disconnect this Bitcoin node from the network."
+
+The former singular `spec.peer` field has been replaced by `spec.peers` in the v1alpha1 API.
+
 ## Seed material
 
 `Seed` is a development-oriented helper for producing LND-compatible seed material in a Kubernetes Secret. Sensitive mnemonic and passphrase values are never stored directly in the Seed custom resource.
@@ -580,6 +599,7 @@ Kiln's current milestone is a trustworthy Kubernetes substrate for btcd + LND.
 Implemented:
 
 - persistent btcd lifecycle
+- declarative persistent Bitcoin peer sets
 - persistent LND lifecycle
 - graceful shutdown/finalizers
 - Bitcoin dependency status
